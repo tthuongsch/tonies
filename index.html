@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meine Tonie-Sammlung</title>
+  <meta name="description" content="Übersicht meiner Tonies: was ich behalte und was ich verkaufe.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="kopf">
+    <h1>Meine Tonie-Sammlung</h1>
+
+    <nav class="ansichten" aria-label="Ansicht">
+      <button type="button" data-ansicht="alle">Alle</button>
+      <button type="button" data-ansicht="behalten">Behalten</button>
+      <button type="button" data-ansicht="verkaufen">Verkaufen</button>
+    </nav>
+
+    <div class="werkzeuge">
+      <label class="suche">
+        <span class="unsichtbar">Suche</span>
+        <input id="suche" type="search" placeholder="Suche nach Titel, Reihe, Kollektion …" autocomplete="off">
+      </label>
+      <div class="filter">
+        <label><span class="unsichtbar">Reihe</span><select data-filter="reihe"><option value="">Alle Reihen</option></select></label>
+        <label><span class="unsichtbar">Format</span><select data-filter="format"><option value="">Alle Formate</option></select></label>
+        <label><span class="unsichtbar">Inhalt</span><select data-filter="inhalt"><option value="">Alle Inhalte</option></select></label>
+        <label><span class="unsichtbar">Thema</span><select data-filter="thema"><option value="">Alle Themen</option></select></label>
+      </div>
+      <button id="zuruecksetzen" type="button" class="zuruecksetzen" hidden>Filter zurücksetzen</button>
+    </div>
+
+    <dl class="zaehler" aria-live="polite">
+      <div><dt>Tonies</dt><dd id="z-tonies">–</dd></div>
+      <div data-zaehler="behalten"><dt>zum Behalten</dt><dd id="z-behalten">–</dd></div>
+      <div data-zaehler="verkaufen"><dt>zum Verkaufen</dt><dd id="z-verkaufen">–</dd></div>
+    </dl>
+  </header>
+
+  <main>
+    <p id="stand" class="stand" hidden></p>
+    <p id="hinweis" class="hinweis">Lade Sammlung …</p>
+    <ul id="karten" class="karten"></ul>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="config.js"></script>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

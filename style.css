@@ -1,0 +1,275 @@
+/* Farben und Abstände an einer Stelle, damit sie leicht anzupassen sind. */
+:root {
+  --hintergrund: #f6f3ee;
+  --flaeche: #ffffff;
+  --text: #2a2622;
+  --leise: #6f665d;
+  --linie: #e6e0d8;
+  --akzent: #d6322b;            /* Tonie-Rot */
+  --behalten: #1f7a4d;
+  --behalten-hell: #e3f3ea;
+  --verkaufen: #b35400;
+  --verkaufen-hell: #fdecd9;
+  --fehlt: #b3261e;
+  --fehlt-hell: #fde7e5;
+  --radius: 14px;
+  --schatten: 0 1px 2px rgb(0 0 0 / 0.06), 0 4px 14px rgb(0 0 0 / 0.05);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+  background: var(--hintergrund);
+}
+
+/* ---------- Kopfbereich ---------- */
+.kopf {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px 16px 8px;
+}
+.kopf h1 {
+  margin: 0 0 14px;
+  font-size: clamp(1.5rem, 4vw, 2.1rem);
+  letter-spacing: -0.01em;
+}
+
+.ansichten {
+  display: inline-flex;
+  padding: 4px;
+  gap: 4px;
+  background: var(--flaeche);
+  border: 1px solid var(--linie);
+  border-radius: 999px;
+}
+.ansichten button {
+  font: inherit;
+  font-weight: 600;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--leise);
+  cursor: pointer;
+}
+.ansichten button[aria-pressed="true"] {
+  background: var(--akzent);
+  color: #fff;
+}
+.ansichten button:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+
+/* Nur für Screenreader sichtbar (Beschriftung der Felder) */
+.unsichtbar {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.werkzeuge {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.suche input,
+.filter select {
+  width: 100%;
+  font: inherit;
+  font-size: 16px;   /* ab 16px zoomt das iPhone beim Antippen nicht hinein */
+  color: var(--text);
+  background: var(--flaeche);
+  border: 1px solid var(--linie);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.suche input:focus-visible,
+.filter select:focus-visible { outline: 3px solid var(--akzent); outline-offset: 1px; }
+.filter {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.zuruecksetzen {
+  justify-self: start;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--akzent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+@media (min-width: 900px) {
+  .werkzeuge { grid-template-columns: minmax(260px, 1fr) 2fr; align-items: center; }
+  .filter { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .zuruecksetzen { grid-column: 1 / -1; }
+}
+
+.zaehler {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 16px 0 0;
+}
+.zaehler div { display: flex; align-items: baseline; gap: 6px; }
+.zaehler dd {
+  order: -1;
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.zaehler dt { color: var(--leise); }
+.zaehler [data-zaehler="behalten"] dd { color: var(--behalten); }
+.zaehler [data-zaehler="verkaufen"] dd { color: var(--verkaufen); }
+
+/* ---------- Karten ---------- */
+main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 8px 16px 48px;
+}
+.hinweis { color: var(--leise); }
+.stand {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--verkaufen-hell);
+  color: var(--verkaufen);
+  font-size: 0.9rem;
+}
+
+.karten {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+  /* Handy: zwei Spalten. Größere Bildschirme: so viele Spalten, wie hineinpassen. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (min-width: 640px) {
+  .karten {
+    gap: 18px;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+}
+
+.karte {
+  display: flex;
+  flex-direction: column;
+  background: var(--flaeche);
+  border-radius: var(--radius);
+  box-shadow: var(--schatten);
+  overflow: hidden;
+}
+
+.bild {
+  position: relative;
+  aspect-ratio: 1;
+  background: #fff;
+}
+.bild img,
+.platzhalter {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.bild img { object-fit: contain; padding: 6%; background: #fff; }
+
+.platzhalter {
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 38%, hsl(var(--farbton) 70% 92%) 0 32%, transparent 33%),
+    hsl(var(--farbton) 55% 96%);
+}
+.platzhalter span {
+  display: grid;
+  place-items: center;
+  width: 38%;
+  aspect-ratio: 1;
+  margin-bottom: 10%;
+  border-radius: 50%;
+  background: hsl(var(--farbton) 45% 55%);
+  color: #fff;
+  font-size: clamp(1.4rem, 6vw, 2.4rem);
+  font-weight: 700;
+}
+
+.format {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.92);
+  border: 1px solid var(--linie);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--leise);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  padding: 10px 12px 14px;
+}
+.text p { margin: 0; }
+
+.reihe {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--leise);
+}
+.titel {
+  margin: 0;
+  font-size: 1.02rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.marken { display: flex; flex-wrap: wrap; gap: 4px; }
+.marke {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.marke.verkaufen { background: var(--verkaufen-hell); color: var(--verkaufen); }
+.marke.behalten { background: var(--behalten-hell); color: var(--behalten); }
+.marke.fehlt { background: var(--fehlt-hell); color: var(--fehlt); }
+
+.verkauf { font-size: 0.9rem; }
+.details { font-size: 0.85rem; color: var(--leise); }
+.kommentar { font-size: 0.82rem; font-style: italic; color: var(--leise); }
+
+.link {
+  margin-top: auto;
+  padding-top: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--akzent);
+  text-decoration: none;
+}
+.link:hover, .link:focus-visible { text-decoration: underline; }
+
+/* Handy: etwas kompakter */
+@media (max-width: 400px) {
+  .ansichten button { padding: 8px 12px; }
+  .text { padding: 8px 10px 12px; }
+  .titel { font-size: 0.95rem; }
+}

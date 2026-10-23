@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Datenprüfung</title>
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; margin: 0 auto; max-width: 1100px; padding: 16px; color: #222; background: #fafafa; }
+    h1 { font-size: 1.4rem; }
+    table { border-collapse: collapse; width: 100%; background: #fff; margin-bottom: 24px; }
+    th, td { border: 1px solid #ddd; padding: 4px 8px; text-align: left; vertical-align: top; }
+    th { background: #f0f0f0; }
+    .ok { color: #1a7f37; font-weight: 600; }
+    .fehler { color: #c62828; font-weight: 600; }
+    .wrap { overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>Datenprüfung</h1>
+  <p id="quelle">Lade Daten …</p>
+  <h2>Prüfwerte</h2>
+  <table id="pruefungen"><tr><th>Prüfung</th><th>Erwartet</th><th>Ergebnis</th><th></th></tr></table>
+  <h2>Alle Einträge, so wie die Website sie liest</h2>
+  <div class="wrap"><table id="liste"></table></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="config.js"></script>
+  <script src="data.js"></script>
+  <script>
+    (async () => {
+      const cfg = window.TONIE_CONFIG;
+      const url = cfg.csvUrl || cfg.ersatzUrl;
+      document.getElementById("quelle").textContent = "Quelle: " + url;
+      const tonies = await ToniesDaten.laden(url);
+      const summe = (feld) => tonies.reduce((s, t) => s + t[feld], 0);
+      const pika = tonies.find((t) => t.titel === "Pikachu") || {};
+
+      const pruefungen = [
+        ["Verschiedene Tonies", 66, tonies.length],
+        ["Exemplare behalten", 45, summe("behalten")],
+        ["Exemplare verkaufen", 36, summe("verkaufen")],
+        ["Pikachu behalten / verkaufen", "1 / 2", `${pika.behalten} / ${pika.verkaufen}`],
+        ["Tonies mit beidem", 15, tonies.filter((t) => t.behalten && t.verkaufen).length],
+        ["„Anzahl fehlt“", "Die magische Perle – Rudolph ist verschwunden",
+          tonies.filter((t) => t.anzahlFehlt).map((t) => t.titel).join(", ")],
+        ["Ohne Link", "Pinocchio", tonies.filter((t) => !t.link).map((t) => t.titel).join(", ")],
+        ["Spalte „Prüfen“ eingelesen?", "nein",
+          tonies.some((t) => "pruefen" in t || "prüfen" in t) ? "ja" : "nein"],
+      ];
+      const tab = document.getElementById("pruefungen");
+      for (const [name, soll, ist] of pruefungen) {
+        const ok = String(soll) === String(ist);
+        tab.insertAdjacentHTML("beforeend",
+          `<tr><td>${name}</td><td>${soll}</td><td>${ist}</td>` +
+          `<td class="${ok ? "ok" : "fehler"}">${ok ? "✓" : "✗"}</td></tr>`);
+      }
+
+      const felder = Object.keys(tonies[0]);
+      const liste = document.getElementById("liste");
+      liste.insertAdjacentHTML("beforeend", "<tr>" + felder.map((f) => `<th>${f}</th>`).join("") + "</tr>");
+      for (const t of tonies) {
+        const zellen = felder.map((f) => {
+          const td = document.createElement("td");
+          td.textContent = t[f] === null ? "" : String(t[f]);
+          return td.outerHTML;
+        });
+        liste.insertAdjacentHTML("beforeend", "<tr>" + zellen.join("") + "</tr>");
+      }
+    })().catch((e) => { document.getElementById("quelle").textContent = "Fehler: " + e.message; });
+  </script>
+</body>
+</html>
