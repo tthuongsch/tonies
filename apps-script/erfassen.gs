@@ -372,25 +372,34 @@ function katalogEintraege() {
 
 
 /* ------------------------------------------------------------------
- * Teil 3: Web-App für die Unterseite "Hinzufügen"
+ * Teil 3: Web-App für die Website
  *
  * Die Website schickt POST-Anfragen mit JSON: { aktion, schluessel, ... }.
- * Nur "entsperren" braucht das Passwort; alle anderen Aktionen brauchen den
- * Zugangsschlüssel, den "entsperren" für 24 Stunden ausgibt.
- * Das Passwort steht ausschließlich in den Skripteigenschaften (PASSWORT).
+ * Zugang gibt es in zwei Stufen, beide über Skripteigenschaften:
+ *   - PIN       → Zugangsschlüssel "pin": private Felder sehen (Preis, Kommentar, Verliehen an/am)
+ *   - PASSWORT  → Zugangsschlüssel "admin": zusätzlich Hinzufügen, Verwalten, KI
+ * Beide Schlüssel gelten 7 Tage und sind an ihr Geheimnis gebunden: Wer PIN oder
+ * Passwort ändert, macht alle damit ausgestellten Schlüssel sofort ungültig.
  * ------------------------------------------------------------------ */
 
-const SCHLUESSEL_GUELTIG_MS = 24 * 60 * 60 * 1000;
-const MAX_FEHLVERSUCHE = 5;
-const SPERRE_MS = 15 * 60 * 1000;
-const ZUSTAENDE = ["Neu", "Wie neu", "Gebraucht"];
+const SCHLUESSEL_GUELTIG_MS = 7 * 24 * 60 * 60 * 1000;
+// Gestaffelte Sperre: nach 5 Fehlversuchen 1 Min., danach je Fehlversuch 5, 15, 60 Min.
+const SPERRSTUFEN_MIN = [0, 1, 5, 15, 60];
+const FEHLVERSUCHE_BIS_SPERRE = 5;
+const ZUSTAENDE = ["Neu & OVP", "Neu ohne OVP", "Gebraucht – sehr gut", "Gebraucht – gut", "Gebraucht – akzeptabel"];
+const RARITAETEN = ["Normal", "Selten", "Rarität", "Munkelität"];
 const MAX_TREFFER = 24;
 // Spalte im Sheet → Feldname, wie ihn die Website verwendet (BLATT kommt aus bilder.gs).
 const FELDER = {
   "Titel": "titel", "Reihe": "reihe", "Kollektion": "kollektion", "Format": "format",
   "Inhalt": "inhalt", "Thema": "thema", "Anzahl behalten": "behalten", "Anzahl verkaufen": "verkaufen",
   "Link": "link", "Bild-URL": "bild", "Preis (€)": "preis", "Zustand": "zustand", "Kommentar": "kommentar",
+  "ID": "id", "Rarität": "raritaet", "Verliehen an": "verliehenAn", "Verliehen am": "verliehenAm",
+  "Hinzugefügt am": "hinzugefuegtAm", "Geändert am": "geaendertAm", "Eigenes Foto": "eigenesFoto",
+  "Archiviert am": "archiviertAm",
 };
+// Nur diese Felder dürfen ohne PIN die Website erreichen (Tab "Öffentlich", CSV).
+const PRIVATE_FELDER = ["verliehenAn", "verliehenAm", "kommentar", "preis"];
 
 function doGet() {
   return alsJson({ ok: true, hinweis: "Die Tonie-Erfassung ist bereit." });
@@ -404,10 +413,16 @@ function doPost(e) {
     return alsJson({ ok: false, fehler: "Ungültige Anfrage." });
   }
   try {
-    if (anfrage.aktion === "entsperren") return alsJson(entsperren(anfrage.passwort));
-    if (!schluesselGueltig(anfrage.schluessel)) {
-      return alsJson({ ok: false, code: "schluessel", fehler: "Bitte das Passwort eingeben." });
-    }
+    if (anfrage.aktion === "entsperren") return alsJson(anmelden("admin", anfrage.passwort));
+    if (anfrage.aktion === "pin") return alsJson(anmelden("pin", anfrage.pin));
+
+    const rolle = schluesselRolle(anfrage.schluessel);
+    if (!rolle) return alsJson({ ok: false, code: "schluessel", fehler: "Bitte erneut entsperren." });
+    // Mit PIN (oder Passwort): die Sammlung mit privaten Feldern
+    if (anfrage.aktion === "sammlung") return alsJson({ ok: true, tonies: sammlungMitPrivatem() });
+    if (anfrage.aktion === "pruefen") return alsJson({ ok: true, rolle: rolle });
+    if (rolle !== "admin") return alsJson({ ok: false, code: "schluessel", fehler: "Dafür bitte mit dem Passwort entsperren." });
+
     switch (anfrage.aktion) {
       case "liste": return alsJson({ ok: true, tonies: eigeneListe().map(fuerWebsite) });
       case "suchen": return alsJson({ ok: true, treffer: suchen(anfrage.text) });
@@ -432,49 +447,64 @@ function alsJson(daten) {
   return ContentService.createTextOutput(JSON.stringify(daten)).setMimeType(ContentService.MimeType.JSON);
 }
 
-/* --- Passwort und Zugangsschlüssel --- */
+/* --- PIN, Passwort und Zugangsschlüssel --- */
 
-function entsperren(passwort) {
+const GEHEIMNIS = { admin: "PASSWORT", pin: "PIN" };
+const BEZEICHNUNG = { admin: "Das Passwort", pin: "Die PIN" };
+
+/** Prüft PIN bzw. Passwort und gibt bei Erfolg einen Zugangsschlüssel für 7 Tage aus. */
+function anmelden(rolle, eingabe) {
   const props = PropertiesService.getScriptProperties();
-  const richtig = props.getProperty("PASSWORT");
-  if (!richtig) return { ok: false, fehler: "Im Apps Script ist noch kein PASSWORT hinterlegt." };
+  const richtig = props.getProperty(GEHEIMNIS[rolle]);
+  if (!richtig) return { ok: false, fehler: `Im Apps Script ist noch keine Skripteigenschaft ${GEHEIMNIS[rolle]} hinterlegt.` };
 
   const sperre = LockService.getScriptLock();
   sperre.waitLock(10000);
   try {
-    const f = JSON.parse(props.getProperty("fehlversuche") || '{"anzahl":0,"bis":0}');
+    const zaehler = "fehl_" + rolle;
+    const f = JSON.parse(props.getProperty(zaehler) || '{"anzahl":0,"stufe":0,"bis":0,"zuletzt":0}');
+    // Lange Ruhe (24 h ohne Fehlversuch) setzt die Staffel zurück.
+    if (f.zuletzt && Date.now() - f.zuletzt > 24 * 60 * 60 * 1000) { f.anzahl = 0; f.stufe = 0; }
     if (f.bis > Date.now()) {
       const minuten = Math.ceil((f.bis - Date.now()) / 60000);
-      return { ok: false, code: "gesperrt", fehler: `Zu viele Fehlversuche. Bitte in ${minuten} Minuten erneut versuchen.` };
+      return { ok: false, code: "gesperrt", fehler: `Zu viele Versuche. Bitte in ${minuten} Minute${minuten === 1 ? "" : "n"} erneut versuchen.` };
     }
-    if (String(passwort || "") !== richtig) {
+    if (String(eingabe === undefined || eingabe === null ? "" : eingabe) !== richtig) {
       f.anzahl++;
-      if (f.anzahl >= MAX_FEHLVERSUCHE) { f.anzahl = 0; f.bis = Date.now() + SPERRE_MS; }
-      props.setProperty("fehlversuche", JSON.stringify(f));
-      return { ok: false, code: "falsch", fehler: "Das Passwort stimmt nicht." };
+      f.zuletzt = Date.now();
+      // Vor der ersten Sperre 5 Versuche, danach sperrt jeder weitere Fehlversuch die nächste Stufe.
+      if (f.anzahl >= (f.stufe === 0 ? FEHLVERSUCHE_BIS_SPERRE : 1)) {
+        f.stufe = Math.min(f.stufe + 1, SPERRSTUFEN_MIN.length - 1);
+        f.bis = Date.now() + SPERRSTUFEN_MIN[f.stufe] * 60000;
+        f.anzahl = 0;
+      }
+      props.setProperty(zaehler, JSON.stringify(f));
+      return { ok: false, code: "falsch", fehler: `${BEZEICHNUNG[rolle]} stimmt nicht.` };
     }
-    props.setProperty("fehlversuche", '{"anzahl":0,"bis":0}');
+    props.deleteProperty(zaehler);
     abgelaufeneSchluesselEntfernen(props);
 
-    // Gespeichert wird nur ein Fingerabdruck des Schlüssels, gebunden an das aktuelle Passwort.
+    // Gespeichert wird nur ein Fingerabdruck des Schlüssels, gebunden an das aktuelle Geheimnis.
     const schluessel = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "");
     const bis = Date.now() + SCHLUESSEL_GUELTIG_MS;
-    props.setProperty("s_" + fingerabdruck(schluessel), JSON.stringify({ bis: bis, pw: fingerabdruck(richtig) }));
-    return { ok: true, schluessel: schluessel, bis: bis };
+    props.setProperty("s_" + fingerabdruck(schluessel), JSON.stringify({ bis: bis, rolle: rolle, fp: fingerabdruck(richtig) }));
+    return { ok: true, schluessel: schluessel, bis: bis, rolle: rolle };
   } finally {
     sperre.releaseLock();
   }
 }
 
-function schluesselGueltig(schluessel) {
-  if (typeof schluessel !== "string" || schluessel.length < 32) return false;
+/** "admin", "pin" oder null (ungültig, abgelaufen oder Geheimnis inzwischen geändert). */
+function schluesselRolle(schluessel) {
+  if (typeof schluessel !== "string" || schluessel.length < 32) return null;
   const props = PropertiesService.getScriptProperties();
   const eintrag = props.getProperty("s_" + fingerabdruck(schluessel));
-  const passwort = props.getProperty("PASSWORT");
-  if (!eintrag || !passwort) return false;
+  if (!eintrag) return null;
   const e = JSON.parse(eintrag);
-  // Nach einer Passwortänderung passt der Fingerabdruck nicht mehr: alle alten Schlüssel ungültig.
-  return e.bis > Date.now() && e.pw === fingerabdruck(passwort);
+  const rolle = e.rolle || "admin";      // ältere Schlüssel (vor der PIN) waren Passwort-Schlüssel
+  const geheimnis = props.getProperty(GEHEIMNIS[rolle]);
+  if (!geheimnis || e.bis <= Date.now()) return null;
+  return (e.fp || e.pw) === fingerabdruck(geheimnis) ? rolle : null;
 }
 
 function abgelaufeneSchluesselEntfernen(props) {
@@ -508,22 +538,39 @@ function eigeneListe() {
     t.titel = String(t.titel || "").trim();
     t.reihe = String(t.reihe || "").trim();
     if (!t.titel && !t.reihe) continue;
-    ["kollektion", "format", "inhalt", "thema", "link", "bild", "zustand", "kommentar"]
-      .forEach((f) => { t[f] = String(t[f] === undefined ? "" : t[f]).trim(); });
+    ["kollektion", "format", "inhalt", "thema", "link", "bild", "zustand", "kommentar", "id", "raritaet",
+      "verliehenAn", "eigenesFoto"].forEach((f) => { t[f] = String(t[f] === undefined ? "" : t[f]).trim(); });
     t.behalten = anzahlWert(t.behalten) || 0;
     t.verkaufen = anzahlWert(t.verkaufen) || 0;
     t.preis = preisWert(t.preis);
+    t.verliehenAm = datumText(t.verliehenAm, "yyyy-MM-dd");
+    t.hinzugefuegtAm = datumText(t.hinzugefuegtAm, "yyyy-MM-dd'T'HH:mm:ss");
+    t.geaendertAm = datumText(t.geaendertAm, "yyyy-MM-dd'T'HH:mm:ss");
+    if (datumText(t.archiviertAm, "yyyy-MM-dd")) continue; // archivierte Tonies gibt es auf der Website nicht
     liste.push(t);
   }
   return liste;
 }
 
+/** Alle Felder für angemeldete Nutzer (PIN oder Passwort), ohne "Prüfen". */
 function fuerWebsite(t) {
   return {
-    titel: t.titel, reihe: t.reihe, kollektion: t.kollektion, format: t.format, inhalt: t.inhalt,
-    thema: t.thema, link: t.link, bild: t.bild, behalten: t.behalten, verkaufen: t.verkaufen,
-    preis: t.preis, zustand: t.zustand, kommentar: t.kommentar,
+    id: t.id, titel: t.titel, reihe: t.reihe, kollektion: t.kollektion, format: t.format, inhalt: t.inhalt,
+    thema: t.thema, link: t.link, bild: t.bild, eigenesFoto: t.eigenesFoto, behalten: t.behalten, verkaufen: t.verkaufen,
+    preis: t.preis, zustand: t.zustand, raritaet: t.raritaet, kommentar: t.kommentar,
+    verliehenAn: t.verliehenAn, verliehenAm: t.verliehenAm, verliehen: t.verliehenAn ? "ja" : "",
+    hinzugefuegtAm: t.hinzugefuegtAm, geaendertAm: t.geaendertAm,
   };
+}
+
+function sammlungMitPrivatem() {
+  return eigeneListe().map(fuerWebsite);
+}
+
+/** Datum aus dem Sheet (Date oder Text) als Text, z. B. "2026-10-20"; leer bleibt leer. */
+function datumText(wert, format) {
+  if (wert instanceof Date && !isNaN(wert)) return Utilities.formatDate(wert, "Europe/Berlin", format);
+  return String(wert === undefined || wert === null ? "" : wert).trim();
 }
 
 // Gleiche Vereinfachung wie die Suche auf der Website (app.js).
@@ -622,6 +669,7 @@ function eintragen(anfrage) {
       f.behalten = ziel.behalten + plusB;
       f.verkaufen = ziel.verkaufen + plusV;
       zeileSchreiben(blatt, kopf, ziel.zeile, f, "ergänzt");
+      oeffentlichAktualisieren();
       return { ok: true, ergebnis: "ergaenzt", titel: f.titel, behalten: f.behalten, verkaufen: f.verkaufen };
     }
 
@@ -630,6 +678,7 @@ function eintragen(anfrage) {
       return { ok: false, code: "vorhanden", fehler: "Dieser Tonie steht schon in deiner Liste.", vorhanden: vorhandenInfo(vorhanden) };
     }
     zeileSchreiben(blatt, kopf, blatt.getLastRow() + 1, f, "erfasst");
+    oeffentlichAktualisieren();
     return { ok: true, ergebnis: "neu", titel: f.titel, behalten: f.behalten, verkaufen: f.verkaufen };
   } finally {
     sperre.releaseLock();
@@ -642,11 +691,18 @@ function zeileSchreiben(blatt, kopf, zeile, f, wie) {
   const spalte = (name) => kopf.indexOf(name);
   Object.keys(FELDER).forEach((k) => {
     const s = spalte(k);
-    if (s < 0) return;
+    // Nur Felder schreiben, die geliefert wurden: ID, Daten usw. bleiben sonst unverändert.
+    if (s < 0 || !Object.prototype.hasOwnProperty.call(f, FELDER[k])) return;
     const wert = f[FELDER[k]];
     // Anzahl 0 und fehlender Preis bleiben leer, wie im restlichen Sheet.
     neu[s] = wert === null || wert === 0 ? "" : wert;
   });
+  // Automatische Felder: ID und "Hinzugefügt am" bei neuen Zeilen, "Geändert am" immer.
+  const jetzt = new Date();
+  const sId = spalte("ID"), sH = spalte("Hinzugefügt am"), sA = spalte("Geändert am");
+  if (sId >= 0 && !bisher[sId]) neu[sId] = naechsteId();
+  if (sH >= 0 && !bisher[sH] && wie === "erfasst") neu[sH] = jetzt;
+  if (sA >= 0) neu[sA] = jetzt;
   const sB = spalte("Anzahl behalten"), sV = spalte("Anzahl verkaufen"), sG = spalte("Gesamt");
   if (sG >= 0 && sB >= 0 && sV >= 0) {
     neu[sG] = `=N(${spaltenBuchstabe(sB)}${zeile})+N(${spaltenBuchstabe(sV)}${zeile})`;
@@ -682,6 +738,10 @@ function felderPruefen(roh) {
   if (w.link && !/^https:\/\/\S+$/i.test(w.link)) return { fehler: "Der Link muss mit https:// beginnen." };
   if (w.bild && !/^https:\/\/\S+$/i.test(w.bild)) return { fehler: "Die Bild-URL muss mit https:// beginnen." };
   if (w.zustand && ZUSTAENDE.indexOf(w.zustand) < 0) return { fehler: "Zustand bitte aus der Liste wählen." };
+  if (roh.raritaet !== undefined) {
+    w.raritaet = String(roh.raritaet || "").trim();
+    if (w.raritaet && RARITAETEN.indexOf(w.raritaet) < 0) return { fehler: "Rarität bitte aus der Liste wählen." };
+  }
   return { werte: w };
 }
 
@@ -1272,4 +1332,144 @@ function fotoVorsichten(anfrage) {
   const kandidaten = bewertet.filter((b) => !gesehen[b.e.schluessel] && (gesehen[b.e.schluessel] = true))
     .slice(0, VORSICHT_ERGEBNIS).map((b) => b.e);
   return { ok: true, kandidaten: kandidaten, pakete: pakete.length, fehlgeschlagen: fehlgeschlagen, budget: budgetStand() };
+}
+
+
+/* ------------------------------------------------------------------
+ * Teil 7: Datenmodell, Tab "Öffentlich" und Zeitstempel bei Änderungen im Sheet
+ * ------------------------------------------------------------------ */
+
+const NEUE_SPALTEN = ["ID", "Rarität", "Verliehen an", "Verliehen am", "Hinzugefügt am", "Geändert am",
+  "Eigenes Foto", "Archiviert am"];
+const OEFFENTLICH_BLATT = "Öffentlich";
+// Genau diese Spalten stehen im öffentlichen Tab (und damit in der CSV). Private Felder fehlen hier bewusst.
+const OEFFENTLICHE_SPALTEN = ["ID", "Titel", "Reihe", "Kollektion", "Format", "Inhalt", "Thema", "Anzahl behalten",
+  "Anzahl verkaufen", "Gesamt", "Link", "Bild-URL", "Eigenes Foto", "Zustand", "Rarität", "Verliehen",
+  "Hinzugefügt am", "Geändert am"];
+
+/** Neue Tonie-Nummer: T0001, T0002 … (Zähler in den Skripteigenschaften, nie doppelt). */
+function naechsteId() {
+  const props = PropertiesService.getScriptProperties();
+  const n = parseInt(props.getProperty("naechste_id") || "1", 10);
+  props.setProperty("naechste_id", String(n + 1));
+  return "T" + String(n).padStart(4, "0");
+}
+
+/**
+ * Einmalig ausführen (ergänzt nur, löscht nichts):
+ *  - fehlende Spalten am Ende von "Tonies" anlegen
+ *  - jeder Zeile eine ID geben, "Hinzugefügt am" aus dem Vermerk "Über Website erfasst am …" übernehmen
+ *  - Tab "Listen" um Zustand und Rarität ergänzen, Auswahllisten im Sheet setzen
+ *  - Tab "Öffentlich" schreiben
+ */
+function datenmodellEinrichten() {
+  const sperre = LockService.getScriptLock();
+  sperre.waitLock(30000);
+  try {
+    const blatt = toniesBlatt();
+    let kopf = blatt.getRange(1, 1, 1, blatt.getLastColumn()).getValues()[0].map((k) => String(k).trim());
+    NEUE_SPALTEN.forEach((name) => {
+      if (kopf.indexOf(name) >= 0) return;
+      blatt.getRange(1, kopf.length + 1).setValue(name).setFontWeight("bold");
+      kopf.push(name);
+    });
+
+    const werte = blatt.getDataRange().getValues();
+    const sId = kopf.indexOf("ID"), sH = kopf.indexOf("Hinzugefügt am"), sP = kopf.indexOf("Prüfen");
+    const sT = kopf.indexOf("Titel"), sR = kopf.indexOf("Reihe");
+    // Zähler hinter die höchste vorhandene ID setzen, damit nie eine Nummer doppelt vergeben wird.
+    let hoechste = 0;
+    werte.slice(1).forEach((z) => { const m = String(z[sId] || "").match(/^T(\d+)$/); if (m) hoechste = Math.max(hoechste, +m[1]); });
+    const props = PropertiesService.getScriptProperties();
+    if (parseInt(props.getProperty("naechste_id") || "1", 10) <= hoechste) props.setProperty("naechste_id", String(hoechste + 1));
+
+    let vergeben = 0;
+    for (let i = 1; i < werte.length; i++) {
+      if (!String(werte[i][sT] || "").trim() && !String(werte[i][sR] || "").trim()) continue;
+      if (!werte[i][sId]) { blatt.getRange(i + 1, sId + 1).setValue(naechsteId()); vergeben++; }
+      if (!werte[i][sH] && sP >= 0) {
+        const m = String(werte[i][sP] || "").match(/erfasst am (\d{2})\.(\d{2})\.(\d{4})/);
+        if (m) blatt.getRange(i + 1, sH + 1).setValue(new Date(+m[3], +m[2] - 1, +m[1]));
+      }
+    }
+
+    listenEinrichten(blatt, kopf);
+    oeffentlichAktualisieren();
+    SpreadsheetApp.getActive().toast(`Fertig: ${vergeben} IDs vergeben, Tab „${OEFFENTLICH_BLATT}“ geschrieben.`, "Datenmodell");
+  } finally {
+    sperre.releaseLock();
+  }
+}
+
+/** Tab "Listen": Spalten Zustand und Rarität mit den festen Werten; Auswahllisten im Tab "Tonies". */
+function listenEinrichten(blatt, kopf) {
+  const sheet = SpreadsheetApp.getActive();
+  const listen = sheet.getSheetByName("Listen") || sheet.insertSheet("Listen");
+  const lKopf = listen.getLastColumn() ? listen.getRange(1, 1, 1, listen.getLastColumn()).getValues()[0].map((k) => String(k).trim()) : [];
+  [["Zustand", ZUSTAENDE], ["Rarität", RARITAETEN]].forEach(([name, werte]) => {
+    let s = lKopf.indexOf(name);
+    if (s < 0) { s = lKopf.length; lKopf.push(name); }
+    // Alte Werte der Spalte leeren (z. B. "Wie neu"), dann die neuen eintragen.
+    const hoehe = Math.max(listen.getLastRow(), werte.length + 1);
+    listen.getRange(2, s + 1, hoehe - 1, 1).setValues(Array.from({ length: hoehe - 1 }, () => [""]));
+    listen.getRange(1, s + 1).setValue(name).setFontWeight("bold");
+    listen.getRange(2, s + 1, werte.length, 1).setValues(werte.map((w) => [w]));
+    const sTonies = kopf.indexOf(name);
+    if (sTonies >= 0) {
+      const regel = SpreadsheetApp.newDataValidation()
+        .requireValueInRange(listen.getRange(2, s + 1, werte.length, 1), true).setAllowInvalid(false).build();
+      blatt.getRange(2, sTonies + 1, Math.max(blatt.getMaxRows() - 1, 1), 1).setDataValidation(regel);
+    }
+  });
+}
+
+/** Schreibt den Tab "Öffentlich" neu: nur offene Spalten, keine archivierten Tonies. */
+function oeffentlichAktualisieren() {
+  const sheet = SpreadsheetApp.getActive();
+  const blatt = toniesBlatt();
+  const werte = blatt.getDataRange().getValues();
+  const kopf = werte[0].map((k) => String(k).trim());
+  const s = (name) => kopf.indexOf(name);
+  const zeilen = [OEFFENTLICHE_SPALTEN];
+  for (let i = 1; i < werte.length; i++) {
+    const z = werte[i];
+    if (!String(z[s("Titel")] || "").trim() && !String(z[s("Reihe")] || "").trim()) continue;
+    if (s("Archiviert am") >= 0 && z[s("Archiviert am")]) continue;
+    zeilen.push(OEFFENTLICHE_SPALTEN.map((name) => {
+      if (name === "Verliehen") return s("Verliehen an") >= 0 && String(z[s("Verliehen an")] || "").trim() ? "ja" : "";
+      if (s(name) < 0) return "";
+      const wert = z[s(name)];
+      if (name === "Hinzugefügt am" || name === "Geändert am") return datumText(wert, "yyyy-MM-dd'T'HH:mm:ss");
+      return wert === undefined || wert === null ? "" : wert;
+    }));
+  }
+  const ziel = sheet.getSheetByName(OEFFENTLICH_BLATT) || sheet.insertSheet(OEFFENTLICH_BLATT);
+  ziel.clearContents();
+  ziel.getRange(1, 1, zeilen.length, OEFFENTLICHE_SPALTEN.length).setValues(zeilen);
+  return zeilen.length - 1;
+}
+
+/**
+ * Läuft automatisch bei jeder Änderung von Hand im Sheet:
+ * setzt "Geändert am", vergibt bei neuen Zeilen ID und "Hinzugefügt am"
+ * und aktualisiert den Tab "Öffentlich".
+ */
+function onEdit(e) {
+  if (!e || !e.range || e.range.getSheet().getName() !== BLATT || e.range.getRow() < 2) return;
+  const blatt = e.range.getSheet();
+  const kopf = blatt.getRange(1, 1, 1, blatt.getLastColumn()).getValues()[0].map((k) => String(k).trim());
+  const s = (name) => kopf.indexOf(name);
+  if (s("Geändert am") < 0) return; // Datenmodell noch nicht eingerichtet
+  // Änderungen an den automatischen Spalten selbst lösen nichts aus.
+  const auto = ["ID", "Hinzugefügt am", "Geändert am"].map(s);
+  if (e.range.getNumColumns() === 1 && auto.indexOf(e.range.getColumn() - 1) >= 0) return;
+  const jetzt = new Date();
+  for (let zeile = e.range.getRow(); zeile < e.range.getRow() + e.range.getNumRows(); zeile++) {
+    const z = blatt.getRange(zeile, 1, 1, kopf.length).getValues()[0];
+    if (!String(z[s("Titel")] || "").trim() && !String(z[s("Reihe")] || "").trim()) continue;
+    blatt.getRange(zeile, s("Geändert am") + 1).setValue(jetzt);
+    if (!z[s("ID")]) blatt.getRange(zeile, s("ID") + 1).setValue(naechsteId());
+    if (s("Hinzugefügt am") >= 0 && !z[s("Hinzugefügt am")]) blatt.getRange(zeile, s("Hinzugefügt am") + 1).setValue(jetzt);
+  }
+  oeffentlichAktualisieren();
 }

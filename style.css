@@ -427,3 +427,23 @@ fieldset.anzahl .klein { grid-column: 1 / -1; margin: 0; }
 mark { background: #ffe58a; color: inherit; border-radius: 3px; padding: 0 1px; }
 .marke.sicher-hoch { background: var(--behalten-hell); color: var(--behalten); }
 .marke.sicher-mittel { background: var(--verkaufen-hell); color: var(--verkaufen); }
+
+/* Schloss (PIN) und PIN-Fenster */
+.kopf-knoepfe { display: flex; gap: 8px; align-items: center; }
+.schloss { min-width: 44px; padding: 8px 10px; font-size: 1.1rem; }
+.fenster {
+  border: 0; border-radius: var(--radius); padding: 20px; width: min(92vw, 360px);
+  box-shadow: 0 10px 40px rgb(0 0 0 / 0.25); color: var(--text); background: var(--flaeche);
+}
+.fenster::backdrop { background: rgb(0 0 0 / 0.35); }
+.fenster h2 { margin: 0 0 6px; font-size: 1.2rem; }
+.pin-eingabe {
+  width: 100%; margin-top: 12px; padding: 12px; text-align: center;
+  font: inherit; font-size: 1.8rem; letter-spacing: 0.6em;
+  border: 1px solid var(--linie); border-radius: 10px;
+  -webkit-text-security: disc;
+}
+.pin-eingabe:focus-visible { outline: 3px solid var(--akzent); outline-offset: 1px; }
+.marke.gesperrt { border: 1px dashed var(--linie); background: var(--flaeche); color: var(--leise); font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
+.marke.raritaet { background: #fff3c4; color: #8a6100; }
+.marke.verliehen { background: #e8e3fb; color: #4b3a99; }

@@ -52,7 +52,7 @@
         antwort = await r.json();
       }
       if (antwort.code === "schluessel" && aktion !== "entsperren") {
-        sperren("Bitte erneut entsperren (der Zugang gilt 24 Stunden).");
+        sperren("Bitte erneut entsperren (der Zugang gilt 7 Tage).");
         throw new Error("abgelaufen");
       }
       return antwort;

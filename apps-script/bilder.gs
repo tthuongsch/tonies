@@ -20,6 +20,8 @@ function onOpen() {
     .createMenu("Tonies")
     .addItem("Bilder nachtragen", "bilderNachtragen")
     .addItem("Katalog von tonies.com aktualisieren", "katalogAktualisieren")
+    .addItem("Datenmodell einrichten (einmalig)", "datenmodellEinrichten")
+    .addItem("Tab „Öffentlich“ aktualisieren", "oeffentlichAktualisieren")
     .addItem("Automatik einschalten", "automatikEinschalten")
     .addToUi();
 }
@@ -95,6 +97,10 @@ function automatikEinschalten() {
   if (vorhanden.indexOf("katalogAktualisieren") < 0) {
     ScriptApp.newTrigger("katalogAktualisieren").timeBased().everyDays(1).atHour(4).create();
   }
+  // Sicherheitsnetz: falls eine Änderung den Tab "Öffentlich" nicht sofort aktualisiert hat.
+  if (vorhanden.indexOf("oeffentlichAktualisieren") < 0) {
+    ScriptApp.newTrigger("oeffentlichAktualisieren").timeBased().everyMinutes(10).create();
+  }
   SpreadsheetApp.getActive().toast(
-    "Bilder werden stündlich nachgetragen, der Katalog täglich gegen 4 Uhr aktualisiert.", "Tonie-Automatik");
+    "Bilder stündlich, Katalog täglich gegen 4 Uhr, Tab „Öffentlich“ alle 10 Minuten.", "Tonie-Automatik");
 }

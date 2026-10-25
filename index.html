@@ -13,7 +13,10 @@
   <header class="kopf">
     <div class="kopfzeile">
       <h1>Meine Tonie-Sammlung</h1>
-      <a class="knopf leise hinzufuegen" href="erfassen.html">+ Hinzufügen</a>
+      <div class="kopf-knoepfe">
+        <button id="schloss" type="button" class="knopf leise schloss" aria-label="Mit PIN entsperren">🔒</button>
+        <a class="knopf leise hinzufuegen" href="erfassen.html">+ Hinzufügen</a>
+      </div>
     </div>
 
     <nav class="ansichten" aria-label="Ansicht">
@@ -49,8 +52,33 @@
     <ul id="karten" class="karten"></ul>
   </main>
 
+  <!-- PIN-Fenster: schaltet Preise, Kommentare und Ausleihen frei -->
+  <dialog id="pin-fenster" class="fenster" aria-labelledby="pin-titel">
+    <form method="dialog">
+      <div id="pin-zu">
+        <h2 id="pin-titel">PIN eingeben</h2>
+        <p class="klein">Zeigt Preise, Kommentare und an wen ein Tonie verliehen ist.</p>
+        <input id="pin-eingabe" class="pin-eingabe" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4"
+          autocomplete="off" aria-label="PIN, 4 Ziffern" placeholder="••••">
+        <p id="pin-meldung" class="meldung" role="alert" hidden></p>
+      </div>
+      <div id="pin-offen" hidden>
+        <h2>Entsperrt</h2>
+        <p class="klein">Auf diesem Gerät bis <span id="pin-bis"></span>.</p>
+        <button id="pin-sperren" type="button" class="knopf">Sperren</button>
+      </div>
+      <div class="knopfreihe"><button class="knopf leise" value="schliessen">Schließen</button></div>
+    </form>
+  </dialog>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
   <script src="config.js"></script>
+  <script>
+    // Testmodus nur lokal: echte Abläufe gegen nachgebautes Sheet, ohne Google.
+    if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && /testmodus/.test(location.search)) {
+      document.write('<script src="tools/gs_attrappe.js"><\/script><script src="tools/erfassen_testmodus.js"><\/script>');
+    }
+  </script>
   <script src="data.js"></script>
   <script src="suche.js"></script>
   <script src="app.js"></script>

@@ -8,6 +8,7 @@
     ansicht: "alle",
     suche: "",
     filter: { reihe: "", format: "", inhalt: "", thema: "" },
+    entsperrt: false, // mit PIN oder Passwort: private Felder sichtbar
   };
 
   const el = {
@@ -21,6 +22,13 @@
     suche: document.getElementById("suche"),
     filter: document.querySelectorAll("[data-filter]"),
     zuruecksetzen: document.getElementById("zuruecksetzen"),
+    schloss: document.getElementById("schloss"),
+    pinFenster: document.getElementById("pin-fenster"),
+    pinEingabe: document.getElementById("pin-eingabe"),
+    pinMeldung: document.getElementById("pin-meldung"),
+    pinZu: document.getElementById("pin-zu"),
+    pinOffen: document.getElementById("pin-offen"),
+    pinBis: document.getElementById("pin-bis"),
   };
 
   // Text sicher in HTML einsetzen (verhindert, dass Zeichen wie < aus dem Sheet die Seite stören).
@@ -44,7 +52,9 @@
   }
 
   // Suchen erledigt TonieSuche (suche.js): tolerant bei Umlauten, Tippfehlern und Wortreihenfolge.
+  // Private Felder (Ausleiher, Kommentar) werden nur entsperrt durchsucht.
   const SUCHFELDER = [["titel", 3], ["reihe", 2.5], ["kollektion", 1.5], ["thema", 1]];
+  const SUCHFELDER_PRIVAT = SUCHFELDER.concat([["verliehenAn", 2], ["kommentar", 1]]);
 
   // Ein Feld kann mehrere Werte mit Komma enthalten, z. B. Thema "Märchen, Abenteuer".
   const werteVon = (t, feld) => String(t[feld] || "").split(",").map((w) => w.trim()).filter(Boolean);
@@ -80,11 +90,20 @@
   // Der Platzhalter liegt immer unter dem Bild. Lädt das Bild nicht, wird es entfernt
   // und der Platzhalter ist zu sehen.
   function bild(t) {
-    const img = t.bild
-      ? `<img src="${esc(t.bild)}" alt="" loading="lazy" decoding="async" onerror="this.remove()">`
+    const quelle = t.eigenesFoto || t.bild;
+    const img = quelle
+      ? `<img src="${esc(quelle)}" alt="" loading="lazy" decoding="async" onerror="this.remove()">`
       : "";
     return platzhalter(t) + img;
   }
+
+  // "2026-10-20" → "20.10.26"
+  function kurzDatum(iso) {
+    const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[3]}.${m[2]}.${m[1].slice(2)}` : "";
+  }
+  // Ein Schloss-Knopf auf der Karte öffnet das PIN-Fenster.
+  const gesperrt = (text) => `<button type="button" class="marke gesperrt" data-pin>🔒 ${esc(text)}</button>`;
 
   function preisText(preis) {
     return preis.toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -107,12 +126,20 @@
       marken.push(`<span class="marke behalten">${t.behalten}× behalten</span>`);
     }
     if (t.anzahlFehlt) marken.push(`<span class="marke fehlt">Anzahl fehlt</span>`);
+    if (t.raritaet && t.raritaet !== "Normal") marken.push(`<span class="marke raritaet">★ ${esc(t.raritaet)}</span>`);
+    if (t.verliehen) {
+      marken.push(zustand.entsperrt && t.verliehenAn
+        ? `<span class="marke verliehen">Verliehen an ${esc(t.verliehenAn)} ${kurzDatum(t.verliehenAm)}</span>`
+        : zustand.entsperrt ? `<span class="marke verliehen">verliehen</span>` : gesperrt("verliehen"));
+    }
 
     const details = [t.inhalt, t.thema].filter(Boolean).map(esc).join(" · ");
 
     const verkauf = [];
     if (ansicht !== "behalten" && t.verkaufen > 0) {
-      if (t.preis !== null) verkauf.push(`<strong>${preisText(t.preis)}</strong>`);
+      // Der Preis ist privat: ohne PIN nur ein Schloss.
+      if (!zustand.entsperrt) verkauf.push(gesperrt("Preis"));
+      else if (t.preis !== null) verkauf.push(`<strong>${preisText(t.preis)}</strong>`);
       if (t.zustand) verkauf.push(esc(t.zustand));
     }
 
@@ -127,7 +154,7 @@
         <div class="marken">${marken.join("")}</div>
         ${verkauf.length ? `<p class="verkauf">${verkauf.join(" · ")}</p>` : ""}
         ${details ? `<p class="details">${details}</p>` : ""}
-        ${t.kommentar ? `<p class="kommentar">${esc(t.kommentar)}</p>` : ""}
+        ${zustand.entsperrt && t.kommentar ? `<p class="kommentar">${markiert(t.kommentar)}</p>` : ""}
         ${t.link ? `<a class="link" href="${esc(t.link)}" target="_blank" rel="noopener">Auf tonies.com ansehen</a>` : ""}
       </div>
     </li>`;
@@ -139,7 +166,10 @@
     let sichtbar = zustand.tonies.filter((t) =>
       passtZurAnsicht(t, ansicht) && passtZuFiltern(t));
     // Mit Suchtext: nur passende Tonies, die besten zuerst.
-    if (suche) sichtbar = TonieSuche.suchen(sichtbar, suche, { felder: SUCHFELDER }).map((x) => x.eintrag);
+    if (suche) {
+      const felder = zustand.entsperrt ? SUCHFELDER_PRIVAT : SUCHFELDER;
+      sichtbar = TonieSuche.suchen(sichtbar, suche, { felder }).map((x) => x.eintrag);
+    }
     const eingeschraenkt = suche.length > 0 || FILTER.some((f) => zustand.filter[f]);
 
     el.karten.innerHTML = sichtbar.map((t) => karte(t, ansicht)).join("");
@@ -155,6 +185,8 @@
     });
 
     el.knoepfe.forEach((k) => k.setAttribute("aria-pressed", k.dataset.ansicht === ansicht));
+    el.schloss.textContent = zustand.entsperrt ? "🔓" : "🔒";
+    el.schloss.setAttribute("aria-label", zustand.entsperrt ? "Entsperrt – Zugang verwalten" : "Mit PIN entsperren");
     el.zuruecksetzen.hidden = !eingeschraenkt;
     el.hinweis.hidden = sichtbar.length > 0;
     if (!sichtbar.length) {
@@ -217,11 +249,100 @@
     }
   }
 
+  // ---------- Zugang mit PIN (oder Passwort von der Seite "Hinzufügen") ----------
+  const PIN_SPEICHER = "tonie-pin";
+  const ADMIN_SPEICHER = "tonie-zugang";
+  function gespeichert(name) {
+    try { const z = JSON.parse(localStorage.getItem(name)); return z && z.schluessel && z.bis > Date.now() ? z : null; }
+    catch { return null; }
+  }
+  // Das Passwort schließt den PIN ein, deshalb zuerst den Passwort-Schlüssel nehmen.
+  const zugang = () => gespeichert(ADMIN_SPEICHER) || gespeichert(PIN_SPEICHER);
+  function zugangLoeschen() {
+    try { localStorage.removeItem(PIN_SPEICHER); localStorage.removeItem(ADMIN_SPEICHER); } catch {}
+  }
+
+  async function webApp(daten) {
+    if (window.ERFASSEN_TESTBACKEND) return window.ERFASSEN_TESTBACKEND(daten); // nur lokaler Testmodus
+    const r = await fetch(window.TONIE_CONFIG.erfassenUrl, {
+      method: "POST", body: JSON.stringify(daten), headers: { "Content-Type": "text/plain;charset=utf-8" },
+    });
+    return r.json();
+  }
+
+  // Entsperrt: frisch vom Apps Script (mit privaten Feldern, Änderungen sofort sichtbar).
+  // Sonst oder bei einem Fehler: die öffentliche CSV.
+  async function sammlungLaden(cfg) {
+    const z = zugang();
+    if (z && cfg.erfassenUrl) {
+      try {
+        const a = await webApp({ aktion: "sammlung", schluessel: z.schluessel });
+        if (a.ok) { zustand.entsperrt = true; return ToniesDaten.ausSammlung(a.tonies); }
+        if (a.code === "schluessel") zugangLoeschen(); // abgelaufen oder PIN geändert
+      } catch (fehler) {
+        console.warn("Apps Script nicht erreichbar, nutze die öffentliche Liste.", fehler);
+      }
+    }
+    zustand.entsperrt = false;
+    return datenHolen(cfg);
+  }
+
+  // PIN-Fenster: prüft automatisch nach der 4. Ziffer.
+  function pinFensterOeffnen() {
+    const z = zugang();
+    el.pinZu.hidden = !!(zustand.entsperrt && z);
+    el.pinOffen.hidden = !(zustand.entsperrt && z);
+    if (z) el.pinBis.textContent = new Date(z.bis).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+    el.pinEingabe.value = "";
+    el.pinMeldung.hidden = true;
+    el.pinFenster.showModal();
+    if (!el.pinZu.hidden) el.pinEingabe.focus();
+  }
+  el.schloss.addEventListener("click", pinFensterOeffnen);
+  el.karten.addEventListener("click", (ev) => { if (ev.target.closest("[data-pin]")) pinFensterOeffnen(); });
+
+  el.pinEingabe.addEventListener("input", async () => {
+    el.pinEingabe.value = el.pinEingabe.value.replace(/\D/g, "").slice(0, 4);
+    if (el.pinEingabe.value.length < 4) return;
+    el.pinEingabe.disabled = true;
+    el.pinMeldung.hidden = false;
+    el.pinMeldung.dataset.art = "hinweis";
+    el.pinMeldung.textContent = "Prüfe …";
+    let a;
+    try { a = await webApp({ aktion: "pin", pin: el.pinEingabe.value }); }
+    catch { a = { ok: false, fehler: "Keine Verbindung. Bitte später erneut versuchen." }; }
+    el.pinEingabe.disabled = false;
+    if (!a.ok) {
+      el.pinMeldung.dataset.art = "fehler";
+      el.pinMeldung.textContent = a.code === "falsch" ? "PIN falsch." : a.fehler;
+      el.pinEingabe.value = "";
+      el.pinEingabe.focus();
+      return;
+    }
+    try { localStorage.setItem(PIN_SPEICHER, JSON.stringify({ schluessel: a.schluessel, bis: a.bis })); } catch {}
+    el.pinFenster.close();
+    neuLaden();
+  });
+
+  document.getElementById("pin-sperren").addEventListener("click", () => {
+    zugangLoeschen();
+    el.pinFenster.close();
+    neuLaden();
+  });
+
+  async function neuLaden() {
+    const cfg = window.TONIE_CONFIG;
+    zustand.tonies = sortieren(await sammlungLaden(cfg));
+    el.filter.forEach((auswahl) => { auswahl.length = 1; });
+    filterFuellen();
+    zeichnen();
+  }
+
   async function start() {
     ansichtAusAdresse();
     const cfg = window.TONIE_CONFIG;
     try {
-      zustand.tonies = sortieren(await datenHolen(cfg));
+      zustand.tonies = sortieren(await sammlungLaden(cfg));
       filterFuellen();
       zeichnen();
     } catch (fehler) {
