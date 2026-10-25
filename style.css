@@ -273,3 +273,140 @@ main {
   .text { padding: 8px 10px 12px; }
   .titel { font-size: 0.95rem; }
 }
+
+/* ================= Seite "Hinzufügen" (erfassen.html) ================= */
+.erfassen main,
+.erfassen .kopf { max-width: 640px; }
+.zurueck { margin: 0 0 6px; font-size: 0.9rem; }
+.zurueck a, a.knopf { color: var(--akzent); text-decoration: none; font-weight: 600; }
+.kopfzeile { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.kopfzeile h1 { margin: 0; }
+
+.karte-flaeche {
+  background: var(--flaeche);
+  border-radius: var(--radius);
+  box-shadow: var(--schatten);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.karte-flaeche p:first-child { margin-top: 0; }
+
+.erfassen label { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 4px; }
+.erfassen input:not([type="checkbox"]),
+.erfassen select,
+.erfassen textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 16px;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid var(--linie);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.erfassen input:focus-visible, .erfassen select:focus-visible, .erfassen textarea:focus-visible {
+  outline: 3px solid var(--akzent); outline-offset: 1px;
+}
+#form-sperre { display: grid; gap: 10px; }
+
+.knopf {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px;
+  padding: 10px 18px;
+  font: inherit; font-weight: 700;
+  color: #fff;
+  background: var(--akzent);
+  border: 0; border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.knopf.leise { background: var(--flaeche); color: var(--akzent); border: 1px solid var(--linie); }
+.knopf:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+.knopfreihe { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+
+.reiter { margin: 4px 0 14px; }
+.suchzeile { display: flex; gap: 8px; }
+.suchzeile input { flex: 1; min-width: 0; }
+
+.meldung, .klein { font-size: 0.9rem; margin: 6px 0 0; }
+.meldung { padding: 8px 12px; border-radius: 10px; background: var(--fehlt-hell); color: var(--fehlt); }
+.meldung[data-art="hinweis"], .klein[data-art="hinweis"] { background: none; color: var(--leise); padding: 0; }
+.klein { color: var(--leise); }
+.klein[data-art="ok"] { color: var(--behalten); }
+.klein[data-art="fehler"] { color: var(--fehlt); }
+
+/* Treffer der Suche */
+.treffer { margin-top: 12px; }
+.treffer-karte {
+  display: flex; flex-direction: column; width: 100%; height: 100%;
+  padding: 0; text-align: left; font: inherit; color: inherit;
+  background: var(--flaeche); border: 0; border-radius: var(--radius);
+  box-shadow: var(--schatten); overflow: hidden; cursor: pointer;
+}
+.treffer-karte:focus-visible { outline: 3px solid var(--akzent); }
+.treffer-karte .text { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px 12px; }
+.treffer-karte .titel { font-weight: 700; line-height: 1.25; }
+.treffer-karte .marke { align-self: flex-start; white-space: normal; }
+.marke:not(.behalten):not(.verkaufen):not(.fehlt) { background: var(--hintergrund); color: var(--leise); }
+
+.mini-bild { position: relative; display: block; aspect-ratio: 1; background: #fff; }
+.mini-bild img, .mini-platzhalter { position: absolute; inset: 0; width: 100%; height: 100%; }
+.mini-bild img { object-fit: contain; padding: 6%; background: #fff; }
+.mini-platzhalter {
+  display: grid; place-items: center;
+  font-size: 2rem; font-weight: 700; color: var(--leise); background: var(--hintergrund);
+}
+
+/* Hinweis "schon vorhanden" */
+.vorhanden {
+  margin-bottom: 14px; padding: 14px 16px;
+  border-radius: var(--radius);
+  background: var(--verkaufen-hell); color: var(--text);
+  border: 2px solid var(--verkaufen);
+}
+.vorhanden p { margin: 0; }
+.ergaenzen-titel {
+  margin: 0 0 10px; padding: 10px 14px; border-radius: 10px;
+  background: var(--behalten-hell); color: var(--behalten);
+}
+
+/* Formular */
+.formular { display: grid; gap: 14px; }
+.feld { margin: 0; }
+.zweispaltig { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 420px) { .zweispaltig { grid-template-columns: 1fr; } }
+.bildfeld { display: grid; grid-template-columns: 88px 1fr; gap: 12px; align-items: center; }
+.bildvorschau {
+  width: 88px; aspect-ratio: 1; border-radius: 10px; background: var(--hintergrund); overflow: hidden;
+}
+.bildvorschau img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+
+fieldset.anzahl {
+  border: 1px solid var(--linie); border-radius: 10px; padding: 10px 12px 12px;
+  display: grid; grid-template-columns: 1fr 90px; gap: 8px 12px; align-items: center;
+}
+fieldset.anzahl legend { font-weight: 600; font-size: 0.9rem; padding: 0 4px; }
+fieldset.anzahl .klein { grid-column: 1 / -1; margin: 0; }
+.erfassen label.haken { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 1rem; cursor: pointer; }
+.haken input { width: 22px; height: 22px; accent-color: var(--akzent); }
+
+.fertig { font-size: 1.1rem; margin-top: 0; }
+.laden {
+  position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+  margin: 0; padding: 10px 18px; border-radius: 999px;
+  background: var(--text); color: #fff; font-weight: 600; box-shadow: var(--schatten);
+}
+.erfassen input:disabled { opacity: 0.45; }
+.treffer-karte .marke { border-radius: 8px; }
+#nichts-gefunden { margin-top: 12px; }
+.formular .vorhanden { margin: 0; }
+.knopfreihe.links { justify-content: flex-start; margin-top: 0; }
+.foto-eingabe { display: grid; gap: 12px; }
+.foto-eingabe .knopfreihe { margin-top: 0; }
+.foto-vorschau { display: flex; gap: 8px; }
+.foto-vorschau:empty { display: none; }
+.foto-vorschau img { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; }
+#foto-ueberschrift, #foto-meldung { margin-top: 0; }
+#mehr-suchen, #foto-weiter { justify-content: flex-start; }
+.kopf > .kopfzeile { margin-bottom: 14px; }
+.hinzufuegen { min-height: 40px; padding: 8px 14px; font-size: 0.95rem; }

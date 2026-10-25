@@ -6,4 +6,7 @@ window.TONIE_CONFIG = {
 
   // Testdaten aus der Excel-Datei. Werden genutzt, wenn csvUrl leer ist.
   ersatzUrl: "data/tonies.csv",
+
+  // Adresse der Web-App aus dem Apps Script (für die Seite "Hinzufügen").
+  erfassenUrl: "https://script.google.com/macros/s/AKfycbwRS-c5ENhgvAS71gQvaYqlv2MCx_T2RuRxpnGCpACBJNXKdJ6NAEcVQCIYxp26MdhuZw/exec",
 };

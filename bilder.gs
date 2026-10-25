@@ -1,9 +1,10 @@
 /**
- * Trägt für jeden Tonie das Produktbild von tonies.com in die Spalte "Bild-URL" ein.
+ * Trägt für jeden Tonie das Produktbild in die Spalte "Bild-URL" ein.
  *
  * So funktioniert es: Das Skript öffnet den Link jeder Zeile, deren "Bild-URL" noch
- * leer ist, und liest dort das Vorschaubild (og:image) aus. Ausgefüllte Zellen
- * werden nie überschrieben. Ein selbst eingetragenes Bild bleibt also erhalten.
+ * leer ist, und liest dort das Vorschaubild (og:image) aus. Das klappt bei tonies.com
+ * und bei den meisten anderen Seiten. Ausgefüllte Zellen werden nie überschrieben.
+ * Ein selbst eingetragenes Bild bleibt also erhalten.
  *
  * Einrichtung: siehe PLAN.md, Abschnitt "Apps Script für Bilder".
  */
@@ -18,7 +19,8 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("Tonies")
     .addItem("Bilder nachtragen", "bilderNachtragen")
-    .addItem("Automatik einschalten (stündlich)", "automatikEinschalten")
+    .addItem("Katalog von tonies.com aktualisieren", "katalogAktualisieren")
+    .addItem("Automatik einschalten", "automatikEinschalten")
     .addToUi();
 }
 
@@ -36,12 +38,12 @@ function bilderNachtragen() {
     throw new Error(`Spalten "${SPALTE_LINK}" und "${SPALTE_BILD}" müssen in Zeile 1 stehen.`);
   }
 
-  // Nur Links zu tonies.com, damit das Skript keine beliebigen Seiten abruft.
+  // Nur echte Webadressen (https), keine anderen Einträge.
   const offen = [];
   for (let i = 1; i < werte.length; i++) {
     const link = String(werte[i][spLink]).trim();
     const bild = String(werte[i][spBild]).trim();
-    if (!bild && /^https:\/\/(www\.)?tonies\.com\//i.test(link)) {
+    if (!bild && /^https:\/\//i.test(link)) {
       offen.push({ zeile: i + 1, link: link });
     }
   }
@@ -52,6 +54,7 @@ function bilderNachtragen() {
     url: o.link,
     muteHttpExceptions: true,
     followRedirects: true,
+    headers: { "User-Agent": "Mozilla/5.0 (Tonie-Sammlung)" },
   })));
 
   let eingetragen = 0;
@@ -83,12 +86,15 @@ function ogImage(html) {
   return /^https:\/\//i.test(url) ? url : "";
 }
 
-/** Legt einen stündlichen Zeitplan an (nur einmal nötig). */
+/** Legt die Zeitpläne an: Bilder stündlich, Katalog täglich (nur einmal nötig). */
 function automatikEinschalten() {
-  const vorhanden = ScriptApp.getProjectTriggers()
-    .some((t) => t.getHandlerFunction() === "bilderNachtragen");
-  if (!vorhanden) {
+  const vorhanden = ScriptApp.getProjectTriggers().map((t) => t.getHandlerFunction());
+  if (vorhanden.indexOf("bilderNachtragen") < 0) {
     ScriptApp.newTrigger("bilderNachtragen").timeBased().everyHours(1).create();
   }
-  SpreadsheetApp.getActive().toast("Bilder werden ab jetzt stündlich nachgetragen.", "Tonie-Bilder");
+  if (vorhanden.indexOf("katalogAktualisieren") < 0) {
+    ScriptApp.newTrigger("katalogAktualisieren").timeBased().everyDays(1).atHour(4).create();
+  }
+  SpreadsheetApp.getActive().toast(
+    "Bilder werden stündlich nachgetragen, der Katalog täglich gegen 4 Uhr aktualisiert.", "Tonie-Automatik");
 }

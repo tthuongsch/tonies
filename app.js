@@ -58,15 +58,18 @@
     return woerter.every((w) => t.suchtext.includes(w));
   }
 
+  // Ein Feld kann mehrere Werte mit Komma enthalten, z. B. Thema "Märchen, Abenteuer".
+  const werteVon = (t, feld) => String(t[feld] || "").split(",").map((w) => w.trim()).filter(Boolean);
+
   function passtZuFiltern(t) {
-    return FILTER.every((f) => !zustand.filter[f] || t[f] === zustand.filter[f]);
+    return FILTER.every((f) => !zustand.filter[f] || werteVon(t, f).includes(zustand.filter[f]));
   }
 
   // Auswahllisten aus den Daten füllen, damit neue Werte im Sheet automatisch erscheinen.
   function filterFuellen() {
     el.filter.forEach((auswahl) => {
       const feld = auswahl.dataset.filter;
-      const werte = [...new Set(zustand.tonies.map((t) => t[feld]).filter(Boolean))]
+      const werte = [...new Set(zustand.tonies.flatMap((t) => werteVon(t, feld)))]
         .sort(sortierer.compare);
       auswahl.insertAdjacentHTML("beforeend",
         werte.map((w) => `<option value="${esc(w)}">${esc(w)}</option>`).join(""));

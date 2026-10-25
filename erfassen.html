@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tonie hinzufügen</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="erfassen">
+  <header class="kopf">
+    <p class="zurueck"><a href="./">← Zur Sammlung</a></p>
+    <div class="kopfzeile">
+      <h1>Tonie hinzufügen</h1>
+      <button id="sperren" type="button" class="knopf leise" hidden>Sperren</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- 1. Passwort -->
+    <section id="bereich-sperre" class="karte-flaeche" hidden>
+      <form id="form-sperre">
+        <label for="passwort">Passwort</label>
+        <input id="passwort" type="password" autocomplete="current-password" required>
+        <button type="submit" class="knopf">Entsperren</button>
+        <p id="sperre-meldung" class="meldung" role="alert" hidden></p>
+      </form>
+    </section>
+
+    <!-- 2. Start: Reiter -->
+    <section id="bereich-start" hidden>
+      <nav class="ansichten reiter" aria-label="Art der Erfassung">
+        <button type="button" data-reiter="suchen">Suchen</button>
+        <button type="button" data-reiter="foto">Foto</button>
+        <button type="button" data-reiter="hand">Von Hand</button>
+      </nav>
+
+      <div data-panel="suchen">
+        <form id="form-suche" class="suchzeile">
+          <label class="unsichtbar" for="suchtext">Name des Tonies</label>
+          <input id="suchtext" type="search" placeholder="z. B. pikachu, grüffelo, bibi mami" autocomplete="off">
+          <button type="submit" class="knopf">Suchen</button>
+        </form>
+        <p id="such-meldung" class="hinweis" hidden></p>
+        <div id="nichts-gefunden" class="karte-flaeche" hidden>
+          <p><strong>Nichts gefunden</strong> – weder in deiner Liste noch in den Katalogen.</p>
+          <div class="knopfreihe">
+            <button type="button" class="knopf leise" data-aktion="anders-schreiben">Anders schreiben</button>
+            <button type="button" class="knopf leise" data-reiter="hand">Von Hand eintragen</button>
+            <button type="button" class="knopf" data-aktion="netz-text">Im Netz suchen (ca. 1–4 Cent)</button>
+          </div>
+          <p class="klein budget-zeile"></p>
+        </div>
+        <ul id="treffer" class="karten treffer"></ul>
+        <div id="mehr-suchen" class="knopfreihe" hidden>
+          <button type="button" class="knopf leise" data-aktion="netz-text">Nicht dabei – im Netz suchen (ca. 1–4 Cent)</button>
+        </div>
+      </div>
+
+      <div data-panel="foto">
+        <div class="karte-flaeche foto-eingabe">
+          <div class="knopfreihe links">
+            <label class="knopf">Foto aufnehmen<input id="foto-kamera" type="file" accept="image/*" capture="environment" hidden></label>
+            <label class="knopf leise">Foto hochladen<input id="foto-datei" type="file" accept="image/*" multiple hidden></label>
+          </div>
+          <div id="foto-vorschau" class="foto-vorschau"></div>
+          <div class="feld">
+            <label for="foto-hinweis">Hinweis (optional – damit wird zuerst kostenlos gesucht)</label>
+            <input id="foto-hinweis" placeholder="z. B. Pikachu, Bibi Hexenbesen" autocomplete="off">
+          </div>
+          <div class="knopfreihe">
+            <button type="button" class="knopf leise" data-aktion="fotos-neu">Neue Fotos</button>
+            <button type="button" id="foto-los" class="knopf" data-aktion="foto-los">Per Foto erkennen (ca. 0,2 Cent)</button>
+          </div>
+          <p class="klein budget-zeile"></p>
+        </div>
+        <p id="foto-meldung" class="meldung" role="alert" hidden></p>
+        <p id="foto-ueberschrift" class="hinweis" hidden></p>
+        <ul id="foto-treffer" class="karten treffer"></ul>
+        <div id="foto-weiter" class="knopfreihe" hidden>
+          <button type="button" class="knopf leise" data-reiter="hand">Von Hand eintragen</button>
+          <button type="button" id="foto-ki" class="knopf leise" data-aktion="foto-ki">Nicht dabei – per Foto erkennen (ca. 0,2 Cent)</button>
+          <button type="button" id="foto-netz" class="knopf leise" data-aktion="netz-foto">Nicht dabei – im Netz suchen (ca. 1–4 Cent)</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Formular (Von Hand und Prüfen eines Treffers) -->
+    <section id="bereich-formular" hidden>
+      <p id="ergaenzen-titel" class="ergaenzen-titel" hidden></p>
+
+      <form id="form-tonie" class="karte-flaeche formular" novalidate>
+        <div class="feld">
+          <label for="f-link">Link (beliebige Webseite)</label>
+          <div class="suchzeile">
+            <input id="f-link" name="link" type="url" inputmode="url" placeholder="https://tonies.com/…">
+            <button type="button" class="knopf leise" data-aktion="auslesen">Daten holen</button>
+          </div>
+          <p id="auslesen-meldung" class="klein" hidden></p>
+        </div>
+
+        <div class="feld bildfeld">
+          <div class="bildvorschau"><img id="bild-vorschau" alt="" hidden></div>
+          <div>
+            <label for="f-bild">Bild-URL</label>
+            <input id="f-bild" name="bild" type="url" inputmode="url" placeholder="wird bei tonies.com automatisch gefüllt">
+          </div>
+        </div>
+
+        <div class="feld"><label for="f-titel">Titel *</label><input id="f-titel" name="titel" required></div>
+        <div class="feld"><label for="f-reihe">Reihe *</label><input id="f-reihe" name="reihe" list="vorschlag-reihe" required></div>
+
+        <!-- Direkt unter Titel/Reihe, damit der Hinweis beim Tippen sichtbar ist -->
+        <div id="vorhanden" class="vorhanden" role="alert" hidden>
+          <p id="vorhanden-text"></p>
+          <div class="knopfreihe">
+            <button type="button" class="knopf leise" data-aktion="abbrechen">Abbrechen</button>
+            <button type="button" class="knopf" data-aktion="ergaenzen">Anzahl erhöhen</button>
+          </div>
+        </div>
+        <div class="feld zweispaltig">
+          <div><label for="f-kollektion">Kollektion</label><input id="f-kollektion" name="kollektion" list="vorschlag-kollektion"></div>
+          <div><label for="f-format">Format</label><input id="f-format" name="format" list="vorschlag-format"></div>
+          <div><label for="f-inhalt">Inhalt</label><input id="f-inhalt" name="inhalt" list="vorschlag-inhalt"></div>
+          <div><label for="f-thema">Thema</label><input id="f-thema" name="thema" list="vorschlag-thema" placeholder="mehrere mit Komma"></div>
+        </div>
+
+        <fieldset class="feld anzahl">
+          <legend id="anzahl-legende">Anzahl</legend>
+          <label class="haken"><input type="checkbox" id="h-behalten"> <span id="text-behalten">Behalten</span></label>
+          <input id="f-behalten" type="number" min="1" max="99" value="1" inputmode="numeric" aria-label="Anzahl behalten" disabled>
+          <label class="haken"><input type="checkbox" id="h-verkaufen"> <span id="text-verkaufen">Verkaufen</span></label>
+          <input id="f-verkaufen" type="number" min="1" max="99" value="1" inputmode="numeric" aria-label="Anzahl verkaufen" disabled>
+          <p id="anzahl-vorschau" class="klein"></p>
+        </fieldset>
+
+        <div id="verkaufsfelder" class="feld zweispaltig" hidden>
+          <div>
+            <label for="f-preis">Preis (€)</label>
+            <input id="f-preis" name="preis" inputmode="decimal" placeholder="z. B. 12,50">
+            <p id="neupreis" class="klein" hidden></p>
+          </div>
+          <div>
+            <label for="f-zustand">Zustand</label>
+            <select id="f-zustand" name="zustand">
+              <option value="">–</option><option>Neu</option><option>Wie neu</option><option>Gebraucht</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="feld"><label for="f-kommentar">Kommentar</label><textarea id="f-kommentar" name="kommentar" rows="2"></textarea></div>
+
+        <p id="formular-meldung" class="meldung" role="alert" hidden></p>
+        <div class="knopfreihe">
+          <button type="button" class="knopf leise" data-aktion="abbrechen">Abbrechen</button>
+          <button type="submit" id="eintragen" class="knopf">Eintragen</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- 4. Fertig -->
+    <section id="bereich-fertig" class="karte-flaeche" hidden>
+      <p id="fertig-text" class="fertig"></p>
+      <p class="klein">Auf der Sammlungsseite erscheint die Änderung nach etwa 5 Minuten.</p>
+      <div class="knopfreihe">
+        <a class="knopf leise" href="./">Zur Sammlung</a>
+        <button type="button" class="knopf" data-aktion="naechster">Nächster Tonie</button>
+      </div>
+    </section>
+
+    <p id="laden" class="laden" hidden>Einen Moment …</p>
+
+    <datalist id="vorschlag-reihe"></datalist>
+    <datalist id="vorschlag-kollektion"></datalist>
+    <datalist id="vorschlag-format"></datalist>
+    <datalist id="vorschlag-inhalt"></datalist>
+    <datalist id="vorschlag-thema"></datalist>
+  </main>
+
+  <script src="config.js"></script>
+  <script>
+    // Testmodus nur lokal: echte Abläufe gegen nachgebautes Sheet, ohne Google.
+    if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && /testmodus/.test(location.search)) {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"><\/script>' +
+        '<script src="tools/gs_attrappe.js"><\/script><script src="tools/erfassen_testmodus.js"><\/script>');
+    }
+  </script>
+  <script src="erfassen.js"></script>
+</body>
+</html>
