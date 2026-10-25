@@ -410,3 +410,20 @@ fieldset.anzahl .klein { grid-column: 1 / -1; margin: 0; }
 #mehr-suchen, #foto-weiter { justify-content: flex-start; }
 .kopf > .kopfzeile { margin-bottom: 14px; }
 .hinzufuegen { min-height: 40px; padding: 8px 14px; font-size: 0.95rem; }
+
+/* Fotos mit "×" zum Entfernen, Foto-Tipps, Markierung von Suchtreffern */
+.foto-vorschau { list-style: none; margin: 0; padding: 0; flex-wrap: wrap; }
+.foto-vorschau li { position: relative; }
+.foto-weg {
+  position: absolute; top: -8px; right: -8px;
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 2px solid #fff; background: var(--text); color: #fff;
+  font-size: 1.5rem; line-height: 1; cursor: pointer; box-shadow: var(--schatten);
+}
+.foto-weg:focus-visible { outline: 3px solid var(--akzent); outline-offset: 2px; }
+.foto-tipps summary { cursor: pointer; font-weight: 600; color: var(--akzent); min-height: 32px; }
+.foto-tipps ul { margin: 6px 0 0; padding-left: 20px; color: var(--leise); font-size: 0.9rem; }
+.knopf:disabled { opacity: 0.45; cursor: not-allowed; }
+mark { background: #ffe58a; color: inherit; border-radius: 3px; padding: 0 1px; }
+.marke.sicher-hoch { background: var(--behalten-hell); color: var(--behalten); }
+.marke.sicher-mittel { background: var(--verkaufen-hell); color: var(--verkaufen); }

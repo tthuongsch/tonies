@@ -63,14 +63,25 @@
             <label class="knopf">Foto aufnehmen<input id="foto-kamera" type="file" accept="image/*" capture="environment" hidden></label>
             <label class="knopf leise">Foto hochladen<input id="foto-datei" type="file" accept="image/*" multiple hidden></label>
           </div>
-          <div id="foto-vorschau" class="foto-vorschau"></div>
+          <ul id="foto-vorschau" class="foto-vorschau" aria-label="Deine Fotos (höchstens 3)"></ul>
+          <details class="foto-tipps">
+            <summary>Tipps für gute Fotos</summary>
+            <ul>
+              <li>Nur <strong>ein</strong> Tonie im Bild, von vorn und nah dran</li>
+              <li>Hell, ohne Gegenlicht, ruhiger Hintergrund</li>
+              <li>Unsicher? Zusätzlich den <strong>Boden</strong> oder die <strong>Verpackung</strong> mit Schrift fotografieren</li>
+            </ul>
+          </details>
           <div class="feld">
-            <label for="foto-hinweis">Hinweis (optional – damit wird zuerst kostenlos gesucht)</label>
+            <label for="foto-hinweis">Hinweis (optional, z. B. Name oder Reihe)</label>
             <input id="foto-hinweis" placeholder="z. B. Pikachu, Bibi Hexenbesen" autocomplete="off">
           </div>
+          <div id="foto-sofort" hidden>
+            <p class="klein">Passt einer davon? (kostenlos gefunden)</p>
+            <ul id="foto-sofort-treffer" class="karten treffer"></ul>
+          </div>
           <div class="knopfreihe">
-            <button type="button" class="knopf leise" data-aktion="fotos-neu">Neue Fotos</button>
-            <button type="button" id="foto-los" class="knopf" data-aktion="foto-los">Per Foto erkennen (ca. 0,2 Cent)</button>
+            <button type="button" id="foto-los" class="knopf" data-aktion="foto-los" disabled>Per Foto erkennen</button>
           </div>
           <p class="klein budget-zeile"></p>
         </div>
@@ -78,9 +89,9 @@
         <p id="foto-ueberschrift" class="hinweis" hidden></p>
         <ul id="foto-treffer" class="karten treffer"></ul>
         <div id="foto-weiter" class="knopfreihe" hidden>
+          <button type="button" class="knopf leise" data-aktion="selbst-suchen">Nicht dabei? Selbst suchen</button>
+          <button type="button" id="foto-netz" class="knopf leise" data-aktion="netz-foto">Im Netz suchen (ca. 1–4 Cent)</button>
           <button type="button" class="knopf leise" data-reiter="hand">Von Hand eintragen</button>
-          <button type="button" id="foto-ki" class="knopf leise" data-aktion="foto-ki">Nicht dabei – per Foto erkennen (ca. 0,2 Cent)</button>
-          <button type="button" id="foto-netz" class="knopf leise" data-aktion="netz-foto">Nicht dabei – im Netz suchen (ca. 1–4 Cent)</button>
         </div>
       </div>
     </section>
@@ -178,6 +189,7 @@
   </main>
 
   <script src="config.js"></script>
+  <script src="suche.js"></script>
   <script>
     // Testmodus nur lokal: echte Abläufe gegen nachgebautes Sheet, ohne Google.
     if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && /testmodus/.test(location.search)) {

@@ -43,20 +43,8 @@
     return true;
   }
 
-  // Für die Suche vereinfachen: klein, ohne Akzente, ä/ae → a usw., ß → ss.
-  // So finden "Grüffelo", "Gruffelo" und "Grueffelo" dasselbe.
-  function vereinfachen(text) {
-    return String(text)
-      .toLowerCase()
-      .replace(/ß/g, "ss")
-      .normalize("NFD").replace(/[̀-ͯ]/g, "")
-      .replace(/ae/g, "a").replace(/oe/g, "o").replace(/ue/g, "u");
-  }
-
-  // Jedes Suchwort muss irgendwo in Titel, Reihe oder Kollektion vorkommen.
-  function passtZurSuche(t, woerter) {
-    return woerter.every((w) => t.suchtext.includes(w));
-  }
+  // Suchen erledigt TonieSuche (suche.js): tolerant bei Umlauten, Tippfehlern und Wortreihenfolge.
+  const SUCHFELDER = [["titel", 3], ["reihe", 2.5], ["kollektion", 1.5], ["thema", 1]];
 
   // Ein Feld kann mehrere Werte mit Komma enthalten, z. B. Thema "Märchen, Abenteuer".
   const werteVon = (t, feld) => String(t[feld] || "").split(",").map((w) => w.trim()).filter(Boolean);
@@ -102,6 +90,9 @@
     return preis.toLocaleString("de-DE", { style: "currency", currency: "EUR" });
   }
 
+  // Suchtreffer im Text gelb markieren
+  const markiert = (text) => zustand.suche.trim() ? TonieSuche.markieren(text, zustand.suche, esc) : esc(text);
+
   function karte(t, ansicht) {
     // Obere Zeile: Reihe, bei vorhandener Kollektion "Reihe · Kollektion".
     // Ist der Titel gleich der Reihe, erscheint die Reihe nicht doppelt.
@@ -131,8 +122,8 @@
         ${t.format ? `<span class="format">${esc(t.format)}</span>` : ""}
       </div>
       <div class="text">
-        ${oben ? `<p class="reihe">${esc(oben)}</p>` : ""}
-        <h2 class="titel">${esc(t.titel)}</h2>
+        ${oben ? `<p class="reihe">${markiert(oben)}</p>` : ""}
+        <h2 class="titel">${markiert(t.titel)}</h2>
         <div class="marken">${marken.join("")}</div>
         ${verkauf.length ? `<p class="verkauf">${verkauf.join(" · ")}</p>` : ""}
         ${details ? `<p class="details">${details}</p>` : ""}
@@ -144,10 +135,12 @@
 
   function zeichnen() {
     const { ansicht } = zustand;
-    const woerter = vereinfachen(zustand.suche).split(/\s+/).filter(Boolean);
-    const sichtbar = zustand.tonies.filter((t) =>
-      passtZurAnsicht(t, ansicht) && passtZuFiltern(t) && passtZurSuche(t, woerter));
-    const eingeschraenkt = woerter.length > 0 || FILTER.some((f) => zustand.filter[f]);
+    const suche = zustand.suche.trim();
+    let sichtbar = zustand.tonies.filter((t) =>
+      passtZurAnsicht(t, ansicht) && passtZuFiltern(t));
+    // Mit Suchtext: nur passende Tonies, die besten zuerst.
+    if (suche) sichtbar = TonieSuche.suchen(sichtbar, suche, { felder: SUCHFELDER }).map((x) => x.eintrag);
+    const eingeschraenkt = suche.length > 0 || FILTER.some((f) => zustand.filter[f]);
 
     el.karten.innerHTML = sichtbar.map((t) => karte(t, ansicht)).join("");
 
@@ -229,10 +222,6 @@
     const cfg = window.TONIE_CONFIG;
     try {
       zustand.tonies = sortieren(await datenHolen(cfg));
-      // Suchtext einmal vorbereiten statt bei jedem Tastendruck neu.
-      zustand.tonies.forEach((t) => {
-        t.suchtext = vereinfachen([t.titel, t.reihe, t.kollektion].join(" "));
-      });
       filterFuellen();
       zeichnen();
     } catch (fehler) {

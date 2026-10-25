@@ -27,9 +27,10 @@
   }
 
   // ---------- Verbindung zur Web-App ----------
-  async function anfrage(aktion, daten) {
+  // optionen.leise: im Hintergrund, ohne "Einen Moment …"-Hinweis (z. B. Katalog nachladen)
+  async function anfrage(aktion, daten, optionen) {
     const body = Object.assign({ aktion, schluessel: zustand.zugang && zustand.zugang.schluessel }, daten);
-    $("laden").hidden = false;
+    if (!(optionen && optionen.leise)) $("laden").hidden = false;
     try {
       let antwort;
       if (window.ERFASSEN_TESTBACKEND) {
@@ -37,9 +38,17 @@
       } else {
         if (!cfg.erfassenUrl) throw new Error("In config.js fehlt die Adresse der Web-App (erfassenUrl).");
         // text/plain vermeidet eine Vorab-Anfrage, die Apps Script nicht beantwortet.
-        const r = await fetch(cfg.erfassenUrl, {
+        const senden = () => fetch(cfg.erfassenUrl, {
           method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "text/plain;charset=utf-8" },
         });
+        let r;
+        try {
+          r = await senden();
+        } catch (netzFehler) {
+          // Apps Script "schläft" manchmal; ein zweiter Versuch nach kurzer Pause klappt meist.
+          await new Promise((fertig) => setTimeout(fertig, 1500));
+          r = await senden();
+        }
         antwort = await r.json();
       }
       if (antwort.code === "schluessel" && aktion !== "entsperren") {
@@ -101,9 +110,50 @@
   async function start() {
     zeige("bereich-start");
     reiter("suchen");
+    katalogLaden();
     await listeLaden();
     const b = await anfrage("budget");
     if (b.ok) budgetZeigen(b.budget);
+  }
+
+  // ---------- Katalog im Browser (Suche ohne Wartezeit) ----------
+  const KATALOG_SPEICHER = "tonie-katalog";
+  zustand.katalog = null;
+
+  function katalogAuspacken(k) {
+    return k.eintraege.map((z) => {
+      const e = {};
+      k.felder.forEach((f, i) => { e[f] = z[i]; });
+      e.neupreis = typeof e.neupreis === "number" ? e.neupreis : null;
+      return e;
+    });
+  }
+
+  // Zuerst sofort aus dem Speicher des Geräts, dann im Hintergrund frisch vom Apps Script.
+  async function katalogLaden() {
+    try {
+      const alt = JSON.parse(localStorage.getItem(KATALOG_SPEICHER));
+      if (alt && alt.eintraege) zustand.katalog = katalogAuspacken(alt);
+    } catch (e) { /* kein gespeicherter Katalog */ }
+    const k = await anfrage("katalog", {}, { leise: true });
+    if (!k.ok) return;
+    zustand.katalog = katalogAuspacken(k);
+    try { localStorage.setItem(KATALOG_SPEICHER, JSON.stringify(k)); } catch (e) { /* Speicher voll: egal */ }
+  }
+
+  // Gleiche Logik wie "suchen" im Apps Script: zuerst deine Liste, dann der Katalog, ohne Doppelte.
+  function lokaleSuche(text, max) {
+    max = max || 24;
+    const ausListe = TonieSuche.suchen(zustand.liste, text, { max: 6 })
+      .map((t) => Object.assign({}, t.eintrag, { quelle: "liste", vorhanden: t.eintrag }));
+    const schonDa = {};
+    const name = (t) => vereinfachen(t.titel) + "|" + vereinfachen(t.reihe);
+    ausListe.forEach((t) => { schonDa[name(t)] = true; if (t.link) schonDa[linkSchluessel(t.link)] = true; });
+    const ausKatalog = TonieSuche.suchen(zustand.katalog || [], text).map((t) => t.eintrag)
+      .filter((k) => !schonDa[name(k)] && !(k.link && schonDa[linkSchluessel(k.link)]))
+      .slice(0, max - ausListe.length)
+      .map((k) => Object.assign({}, k, { quelle: "katalog", vorhanden: findeVorhanden(k) }));
+    return ausListe.concat(ausKatalog);
   }
 
   // Verbrauch für Foto und Websuche, z. B. "Diesen Monat verbraucht: 0,45 Cent von 5,00 $".
@@ -129,19 +179,32 @@
   });
 
   // ---------- Suchen ----------
-  $("form-suche").addEventListener("submit", async (ev) => {
-    ev.preventDefault();
+  async function sucheAusfuehren() {
     const text = $("suchtext").value.trim();
     trefferZeigen([], "treffer");
     $("nichts-gefunden").hidden = true;
     $("mehr-suchen").hidden = true;
-    if (!text) return;
-    const a = await anfrage("suchen", { text });
-    if (!a.ok) return meldung("such-meldung", a.fehler);
     meldung("such-meldung", "");
-    trefferZeigen(a.treffer, "treffer");
-    $("nichts-gefunden").hidden = a.treffer.length > 0;
-    $("mehr-suchen").hidden = a.treffer.length === 0;
+    if (!text) return;
+    let treffer;
+    if (zustand.katalog) {
+      treffer = lokaleSuche(text);
+    } else {
+      const a = await anfrage("suchen", { text });
+      if (!a.ok) return meldung("such-meldung", a.fehler);
+      treffer = a.treffer;
+    }
+    trefferZeigen(treffer, "treffer", text);
+    $("nichts-gefunden").hidden = treffer.length > 0;
+    $("mehr-suchen").hidden = treffer.length === 0;
+  }
+  $("form-suche").addEventListener("submit", (ev) => { ev.preventDefault(); sucheAusfuehren(); });
+  // Mit geladenem Katalog sucht die Seite schon beim Tippen (kostet nichts, keine Wartezeit).
+  let suchTimer;
+  $("suchtext").addEventListener("input", () => {
+    if (!zustand.katalog) return;
+    clearTimeout(suchTimer);
+    suchTimer = setTimeout(sucheAusfuehren, 200);
   });
 
   // Websuche aus dem Reiter "Suchen" (kostenpflichtig, nur auf Knopfdruck)
@@ -160,43 +223,47 @@
       : "Auch im Netz nichts gefunden. Bitte von Hand eintragen.", "hinweis");
   }
 
-  function trefferZeigen(liste, ulId) {
-    zustand.treffer = liste;
-    $(ulId).innerHTML = liste.map(trefferKarte).join("");
+  // Jede Trefferliste merkt sich ihre Einträge (es können zwei gleichzeitig sichtbar sein).
+  zustand.trefferlisten = {};
+  function trefferZeigen(liste, ulId, suchtext) {
+    zustand.trefferlisten[ulId] = liste;
+    $(ulId).innerHTML = liste.map((t, i) => trefferKarte(t, i, suchtext)).join("");
   }
 
   const SICHERHEIT = { hoch: "sehr wahrscheinlich", mittel: "wahrscheinlich", niedrig: "vielleicht" };
 
-  function trefferKarte(t, i) {
+  function trefferKarte(t, i, suchtext) {
+    const zeige = (text) => suchtext ? TonieSuche.markieren(text, suchtext, esc) : esc(text);
     const oben = [t.reihe, t.kollektion].filter(Boolean).join(" · ");
     const marken = [];
+    if (t.sicherheit) marken.push(`<span class="marke sicher-${esc(t.sicherheit)}">${SICHERHEIT[t.sicherheit] || esc(t.sicherheit)}</span>`);
     if (t.vorhanden) marken.push(`<span class="marke behalten">In deiner Liste: ${anzahlText(t.vorhanden)}</span>`);
     else if (t.format) marken.push(`<span class="marke">${esc(t.format)}</span>`);
-    if (t.sicherheit) marken.push(`<span class="marke">${SICHERHEIT[t.sicherheit] || esc(t.sicherheit)}</span>`);
     if (t.quelle === "netz" || t.herkunft === "Community") marken.push(`<span class="marke">Quelle: ${esc(t.herkunft)}</span>`);
     return `<li><button type="button" class="treffer-karte" data-treffer="${i}">
       ${bildHtml(t.bild, t.reihe || t.titel)}
       <span class="text">
-        <span class="reihe">${esc(oben)}</span>
-        <span class="titel">${esc(t.titel)}</span>
+        <span class="reihe">${zeige(oben)}</span>
+        <span class="titel">${zeige(t.titel)}</span>
         ${marken.join("")}
       </span></button></li>`;
   }
 
-  ["treffer", "foto-treffer"].forEach((id) => $(id).addEventListener("click", (ev) => {
+  ["treffer", "foto-treffer", "foto-sofort-treffer"].forEach((id) => $(id).addEventListener("click", (ev) => {
     const k = ev.target.closest("[data-treffer]");
     if (!k) return;
-    const t = zustand.treffer[Number(k.dataset.treffer)];
+    const t = zustand.trefferlisten[id][Number(k.dataset.treffer)];
     formularOeffnen(t, t.vorhanden);
   }));
 
   // ---------- Foto ----------
+  const MAX_FOTOS = 3;
   zustand.fotos = [];
 
-  // Fotos im Browser auf höchstens 1024 px verkleinern: schneller und günstiger.
-  async function fotoVerkleinern(datei) {
+  // Fotos im Browser verkleinern: schneller und günstiger. Schrift bleibt bei 1024 px meist lesbar.
+  async function fotoVerkleinern(datei, max) {
     const bild = await createImageBitmap(datei);
-    const faktor = Math.min(1, 1024 / Math.max(bild.width, bild.height));
+    const faktor = Math.min(1, (max || 1024) / Math.max(bild.width, bild.height));
     const leinwand = document.createElement("canvas");
     leinwand.width = Math.round(bild.width * faktor);
     leinwand.height = Math.round(bild.height * faktor);
@@ -205,14 +272,17 @@
   }
 
   async function fotosHinzufuegen(dateien) {
-    for (const datei of Array.from(dateien).slice(0, 2)) {
+    for (const datei of Array.from(dateien)) {
+      if (zustand.fotos.length >= MAX_FOTOS) {
+        meldung("foto-meldung", `Höchstens ${MAX_FOTOS} Fotos. Bitte zuerst eins mit × entfernen.`, "hinweis");
+        break;
+      }
       try {
         zustand.fotos.push(await fotoVerkleinern(datei));
       } catch (e) {
         meldung("foto-meldung", "Dieses Bild ließ sich nicht lesen. Bitte ein anderes Foto versuchen.");
       }
     }
-    zustand.fotos = zustand.fotos.slice(-2);
     fotoAnsichtAktualisieren();
   }
   ["foto-kamera", "foto-datei"].forEach((id) => $(id).addEventListener("change", (ev) => {
@@ -220,12 +290,32 @@
     ev.target.value = "";
   }));
 
+  // Löschen wirkt nur hier im Browser: Ein entferntes Foto wird nirgends hingeschickt.
+  $("foto-vorschau").addEventListener("click", (ev) => {
+    const k = ev.target.closest("[data-foto-weg]");
+    if (!k) return;
+    zustand.fotos.splice(Number(k.dataset.fotoWeg), 1);
+    fotoAnsichtAktualisieren();
+  });
+
   function fotoAnsichtAktualisieren() {
-    $("foto-vorschau").innerHTML = zustand.fotos.map((f) => `<img src="${f}" alt="Dein Foto">`).join("");
-    const hinweis = $("foto-hinweis").value.trim();
-    $("foto-los").textContent = hinweis ? "Kostenlos suchen" : "Per Foto erkennen (ca. 0,2 Cent)";
+    $("foto-vorschau").innerHTML = zustand.fotos.map((f, i) => `<li>
+      <img src="${f}" alt="Foto ${i + 1}">
+      <button type="button" class="foto-weg" data-foto-weg="${i}" aria-label="Foto ${i + 1} entfernen">×</button></li>`).join("");
+    $("foto-los").disabled = zustand.fotos.length === 0;
   }
-  $("foto-hinweis").addEventListener("input", fotoAnsichtAktualisieren);
+
+  // Hinweis tippen → sofort kostenlose Treffer aus Liste und Katalog zeigen.
+  let hinweisTimer;
+  $("foto-hinweis").addEventListener("input", () => {
+    clearTimeout(hinweisTimer);
+    hinweisTimer = setTimeout(() => {
+      const text = $("foto-hinweis").value.trim();
+      const treffer = text && zustand.katalog ? lokaleSuche(text, 6) : [];
+      trefferZeigen(treffer, "foto-sofort-treffer", text);
+      $("foto-sofort").hidden = treffer.length === 0;
+    }, 250);
+  });
 
   function fotoErgebnisLeeren() {
     trefferZeigen([], "foto-treffer");
@@ -234,44 +324,62 @@
     meldung("foto-meldung", "");
   }
 
-  function fotoErgebnis(ueberschrift, treffer, knoepfe) {
+  function fotoErgebnis(ueberschrift, treffer) {
     trefferZeigen(treffer, "foto-treffer");
     $("foto-ueberschrift").textContent = ueberschrift;
     $("foto-ueberschrift").hidden = false;
     $("foto-weiter").hidden = false;
-    $("foto-ki").hidden = !knoepfe.ki || !zustand.fotos.length;
-    $("foto-netz").hidden = !knoepfe.netz;
   }
 
-  // Stufe 1 (mit Hinweis, kostenlos) oder direkt Stufe 2 (ohne Hinweis)
+  function beschreibungText(b) {
+    if (!b) return "";
+    const teile = [b.figur, b.reihe, b.bauform !== "unbekannt" ? b.bauform : ""].filter(Boolean);
+    return "Erkannt: " + teile.join(" · ") + (b.sichtbarer_text ? ` · Text: „${b.sichtbarer_text}“` : "") + ".";
+  }
+
+  // Ablauf (mit deinen Testfotos gemessen, 5–6 von 6 auf Platz 1):
+  //  1. gleichzeitig: Foto beschreiben + Textsuche  UND  visuelle Vorsichtung über alle Katalogbilder
+  //  2. Bildvergleich mit den 12 besten aus der Vorsichtung und bis zu 18 aus der Textsuche
   async function fotoLos() {
+    if (!zustand.fotos.length) return;
     fotoErgebnisLeeren();
     const hinweis = $("foto-hinweis").value.trim();
-    if (hinweis) {
-      const a = await anfrage("suchen", { text: hinweis });
-      if (!a.ok) return meldung("foto-meldung", a.fehler);
-      return fotoErgebnis(a.treffer.length ? "Gefunden – ohne KI, kostenlos:" : "Ohne KI nichts gefunden.",
-        a.treffer, { ki: true, netz: true });
+    meldung("foto-meldung", "Schritt 1 von 2: Foto wird beschrieben und mit allen Katalogbildern verglichen …", "hinweis");
+    const [a, v] = await Promise.all([
+      anfrage("beschreiben", { fotos: zustand.fotos, hinweis }),
+      anfrage("vorsichten", { fotos: zustand.fotos }),
+    ]);
+    budgetZeigen((v.budget && a.budget && v.budget.verbrauchtUsd > a.budget.verbrauchtUsd ? v : a).budget);
+    if (!a.ok && !v.ok) return meldung("foto-meldung", a.fehler || v.fehler);
+    zustand.beschreibung = a.ok ? a.beschreibung : null;
+    const kandidaten = [];
+    const dazu = (k) => { if (k && !kandidaten.some((x) => x.schluessel === k.schluessel)) kandidaten.push(k); };
+    (v.kandidaten || []).slice(0, 12).forEach(dazu);
+    (a.kandidaten || []).forEach((k) => { if (kandidaten.length < 30) dazu(k); });
+    if (!kandidaten.length) {
+      meldung("foto-meldung", "");
+      return fotoErgebnis(`${beschreibungText(zustand.beschreibung)} Kein passender Tonie in Liste oder Katalog.`, []);
     }
-    return fotoKi();
+    meldung("foto-meldung", "Schritt 2 von 2: genauer Bildvergleich …", "hinweis");
+    const b = await anfrage("auswaehlen", { fotos: zustand.fotos, kandidaten: kandidaten.map((k) => k.schluessel) });
+    budgetZeigen(b.budget);
+    if (!b.ok) return meldung("foto-meldung", b.fehler);
+    meldung("foto-meldung", "");
+    const text = beschreibungText(zustand.beschreibung);
+    fotoErgebnis(b.treffer.length ? `${text} Passende Tonies:` : `${text} Kein passender Tonie in Liste oder Katalog.`, b.treffer);
   }
 
-  async function fotoKi() {
-    if (!zustand.fotos.length) return meldung("foto-meldung", "Bitte zuerst ein Foto aufnehmen oder hochladen.");
-    fotoErgebnisLeeren();
-    meldung("foto-meldung", "Foto wird erkannt …", "hinweis");
-    const a = await anfrage("erkennen", { fotos: zustand.fotos, hinweis: $("foto-hinweis").value.trim() });
-    budgetZeigen(a.budget);
-    if (!a.ok) return meldung("foto-meldung", a.fehler);
-    meldung("foto-meldung", "");
-    zustand.vermutung = a.vermutung;
-    const text = a.beschreibung ? `Auf dem Foto: ${a.beschreibung}` : "";
-    fotoErgebnis(a.treffer.length ? `${text} Passende Tonies:` : `${text} Kein passender Tonie in Liste oder Katalog.`,
-      a.treffer, { ki: false, netz: true });
+  function selbstSuchen() {
+    const b = zustand.beschreibung || {};
+    const text = $("foto-hinweis").value.trim() || [b.figur, b.reihe].filter(Boolean).join(" ");
+    reiter("suchen");
+    $("suchtext").value = text;
+    sucheAusfuehren();
   }
 
   async function netzSuchenFoto() {
-    const text = $("foto-hinweis").value.trim() || zustand.vermutung || "";
+    const b = zustand.beschreibung || {};
+    const text = $("foto-hinweis").value.trim() || [b.figur, b.reihe].filter(Boolean).join(" ");
     fotoErgebnisLeeren();
     meldung("foto-meldung", "Suche im Netz … das dauert etwa 10–30 Sekunden.", "hinweis");
     const a = await anfrage("netz", { text, fotos: zustand.fotos });
@@ -279,7 +387,7 @@
     if (!a.ok) return meldung("foto-meldung", a.fehler);
     meldung("foto-meldung", "");
     fotoErgebnis(a.treffer.length ? "Gefunden im Netz – bitte die Angaben im nächsten Schritt prüfen:"
-      : "Auch im Netz nichts gefunden. Bitte von Hand eintragen.", a.treffer, { ki: false, netz: false });
+      : "Auch im Netz nichts gefunden. Bitte von Hand eintragen.", a.treffer);
   }
 
   document.addEventListener("click", (ev) => {
@@ -293,14 +401,8 @@
     if (aktion === "naechster") abbrechen();
     if (aktion === "netz-text") netzSuchenText();
     if (aktion === "foto-los") fotoLos();
-    if (aktion === "foto-ki") fotoKi();
+    if (aktion === "selbst-suchen") selbstSuchen();
     if (aktion === "netz-foto") netzSuchenFoto();
-    if (aktion === "fotos-neu") {
-      zustand.fotos = [];
-      zustand.vermutung = "";
-      fotoAnsichtAktualisieren();
-      fotoErgebnisLeeren();
-    }
   });
 
   function abbrechen() {
@@ -310,8 +412,9 @@
     $("mehr-suchen").hidden = true;
     meldung("such-meldung", "");
     zustand.fotos = [];
-    zustand.vermutung = "";
+    zustand.beschreibung = null;
     $("foto-hinweis").value = "";
+    $("foto-sofort").hidden = true;
     fotoAnsichtAktualisieren();
     fotoErgebnisLeeren();
     zeige("bereich-start");
