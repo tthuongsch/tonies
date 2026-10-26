@@ -470,6 +470,7 @@
     meldung("formular-meldung", "");
     meldung("auslesen-meldung", "");
     bildVorschau();
+    eigenStart(felder.eigenesFoto);
     listenHinweis();
     vorhandenZeigen(vorhanden || null);
     zeige("bereich-formular");
@@ -616,6 +617,7 @@
     $("vorhanden").hidden = true;
     beschriftungen();
     bildVorschau();
+    eigenStart(t.eigenesFoto);
     window.scrollTo(0, 0);
   }
 
@@ -647,6 +649,45 @@
   $("f-bild").addEventListener("change", bildVorschau);
   $("bild-vorschau").addEventListener("error", () => { $("bild-vorschau").hidden = true; });
 
+  // ---------- Eigenes Foto ----------
+  // Das Foto bleibt im Browser, bis gespeichert wird; erst dann geht es nach Google Drive.
+  // bisher = Adresse aus dem Sheet, neu = verkleinertes Foto (800 px), weg = bisheriges entfernen
+  function eigenStart(bisher) {
+    zustand.eigen = { bisher: bisher || "", neu: null, weg: false };
+    eigenAnzeigen();
+  }
+  function eigenAnzeigen() {
+    const e = zustand.eigen;
+    const zeigen = e.neu || (!e.weg && e.bisher) || "";
+    $("eigen-vorschau").hidden = !zeigen;
+    if (zeigen) $("eigen-vorschau").src = zeigen;
+    $("eigen-leer").hidden = !!zeigen;
+    $("eigen-weg").hidden = !zeigen;
+    $("eigen-erkennung").hidden = !zustand.fotos.length || !!e.neu;
+    $("eigen-hinweis").textContent = e.neu ? "Wird beim Speichern in deinem Google Drive (Ordner „Tonie-Bilder“) abgelegt."
+      : e.weg ? "Wird beim Speichern entfernt (die Datei kommt in den Drive-Papierkorb)."
+      : "Ersetzt auf der Seite das Bild aus der Bild-URL. Wird in deinem Google Drive gespeichert und ist für jeden mit der Bildadresse sichtbar.";
+  }
+  async function eigenSetzen(blob) {
+    try {
+      zustand.eigen.neu = await fotoVerkleinern(blob, 800);
+      zustand.eigen.weg = false;
+    } catch (x) {
+      meldung("formular-meldung", "Dieses Bild ließ sich nicht lesen. Bitte ein anderes Foto versuchen.");
+    }
+    eigenAnzeigen();
+  }
+  ["eigen-kamera", "eigen-datei"].forEach((id) => $(id).addEventListener("change", (ev) => {
+    if (ev.target.files[0]) eigenSetzen(ev.target.files[0]);
+    ev.target.value = "";
+  }));
+  // Was mitgeschickt wird: ein neues Foto oder der Auftrag, das bisherige zu entfernen
+  function fotoDaten() {
+    const e = zustand.eigen;
+    if (e.neu) return { foto: e.neu };
+    return e.weg && e.bisher ? { fotoEntfernen: true } : {};
+  }
+
   // ---------- Eintragen ----------
   function formularWerte() {
     const w = {};
@@ -665,14 +706,15 @@
     }
     const n = anzahlen();
     if (zustand.modus === "verwalten") return speichern(Object.assign(felder, n), false);
+    const foto = fotoDaten();
     let daten;
     if (zustand.modus === "ergaenzen") {
       const ziel = zustand.ziel;
       if (!n.behalten && !n.verkaufen && !confirm("Keine Anzahl hinzugefügt. Nur die Angaben aktualisieren?")) return;
-      daten = { modus: "ergaenzen", ziel: { link: ziel.link, titel: ziel.titel, reihe: ziel.reihe },
-        plusBehalten: n.behalten, plusVerkaufen: n.verkaufen, felder };
+      daten = Object.assign({ modus: "ergaenzen", ziel: { link: ziel.link, titel: ziel.titel, reihe: ziel.reihe },
+        plusBehalten: n.behalten, plusVerkaufen: n.verkaufen, felder }, foto);
     } else {
-      daten = { modus: "neu", felder: Object.assign(felder, n) };
+      daten = Object.assign({ modus: "neu", felder: Object.assign(felder, n) }, foto);
     }
     const a = await anfrage("eintragen", daten);
     if (!a.ok && a.code === "vorhanden") {
@@ -691,7 +733,7 @@
   // ---------- Tonie verwalten: speichern, Konflikt, archivieren ----------
   async function speichern(felder, erzwingen) {
     const e = zustand.eintrag;
-    const a = await anfrage("aendern", { id: e.id, stand: e.geaendertAm, erzwingen, felder });
+    const a = await anfrage("aendern", Object.assign({ id: e.id, stand: e.geaendertAm, erzwingen, felder }, fotoDaten()));
     if (!a.ok && a.code === "konflikt") {
       zustand.konflikt = { aktuell: a.aktuell, felder };
       $("konflikt").hidden = false;
@@ -721,6 +763,8 @@
     if (aktion === "archivieren-frage") $("archiv-frage").hidden = false;
     if (aktion === "archivieren-nein") $("archiv-frage").hidden = true;
     if (aktion === "archivieren-ja") archivieren();
+    if (aktion === "eigen-weg") { zustand.eigen.neu = null; zustand.eigen.weg = !!zustand.eigen.bisher; eigenAnzeigen(); }
+    if (aktion === "eigen-erkennung" && zustand.fotos[0]) fetch(zustand.fotos[0]).then((r) => r.blob()).then(eigenSetzen);
   });
 
   // ---------- Hilfen ----------

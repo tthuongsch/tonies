@@ -81,7 +81,8 @@
       thema: roh.thema || "",
       behalten: anzahl(roh.behalten),
       verkaufen: anzahl(roh.verkaufen),
-      link: webadresse(roh.link),
+      // Links nur mit https (andere Schemata wie javascript: kommen nie auf die Seite)
+      link: /^https:\/\//i.test(roh.link) ? roh.link : "",
       bild: bildVerkleinern(webadresse(roh.bild)),
       preis: preis(roh.preis),
       zustand: roh.zustand || "",

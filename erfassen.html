@@ -126,6 +126,21 @@
           </div>
         </div>
 
+        <!-- Eigenes Foto: ersetzt auf der Seite das Bild aus der Bild-URL -->
+        <fieldset class="feld eigenes-foto">
+          <legend>Eigenes Foto</legend>
+          <div class="bildfeld">
+            <div class="bildvorschau"><img id="eigen-vorschau" alt="" hidden><span id="eigen-leer" class="klein">kein eigenes Foto</span></div>
+            <div class="knopfreihe links">
+              <label class="knopf leise">Foto aufnehmen<input id="eigen-kamera" type="file" accept="image/*" capture="environment" hidden></label>
+              <label class="knopf leise">Datei wählen<input id="eigen-datei" type="file" accept="image/*" hidden></label>
+              <button type="button" class="knopf leise" data-aktion="eigen-erkennung" id="eigen-erkennung" hidden>Foto von der Erkennung</button>
+              <button type="button" class="knopf leise warnung" data-aktion="eigen-weg" id="eigen-weg" hidden>Entfernen</button>
+            </div>
+          </div>
+          <p id="eigen-hinweis" class="klein">Wird in deinem Google Drive (Ordner „Tonie-Bilder“) gespeichert und ist für jeden mit der Bildadresse sichtbar.</p>
+        </fieldset>
+
         <div class="feld"><label for="f-titel">Titel *</label><input id="f-titel" name="titel" required></div>
         <div class="feld"><label for="f-reihe">Reihe *</label><input id="f-reihe" name="reihe" list="vorschlag-reihe" required></div>
 

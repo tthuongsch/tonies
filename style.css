@@ -457,3 +457,14 @@ fieldset.verleihen .knopf { justify-self: start; }
 .knopf.warnung-voll { background: var(--fehlt); }
 .bild-link { display: block; position: absolute; inset: 0; }
 .bild-link:focus-visible { outline: 3px solid var(--akzent); outline-offset: -3px; }
+
+/* Eigenes Foto im Formular */
+fieldset.eigenes-foto { border: 1px solid var(--linie); border-radius: 10px; padding: 10px 12px 12px; display: grid; gap: 8px; }
+fieldset.eigenes-foto legend { font-weight: 600; font-size: 0.9rem; padding: 0 4px; }
+fieldset.eigenes-foto .bildfeld { align-items: start; }
+fieldset.eigenes-foto .bildvorschau { display: grid; text-align: center; }
+fieldset.eigenes-foto .bildvorschau > * { grid-area: 1 / 1; }
+fieldset.eigenes-foto #eigen-leer { align-self: center; padding: 4px; }
+/* Datei-Knöpfe sind <label>: gleich groß wie echte Knöpfe */
+.erfassen label.knopf { display: inline-flex; font-size: 1rem; font-weight: 700; margin: 0; }
+fieldset.eigenes-foto .klein { margin: 0; }

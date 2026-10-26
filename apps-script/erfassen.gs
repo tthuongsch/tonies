@@ -672,7 +672,10 @@ function eintragen(anfrage) {
       if (plusB === null || plusV === null) return { ok: false, fehler: "Die Anzahl muss eine Zahl von 0 bis 99 sein." };
       f.behalten = ziel.behalten + plusB;
       f.verkaufen = ziel.verkaufen + plusV;
+      const foto = eigenesFotoVorbereiten(anfrage, ziel.eigenesFoto, f);
+      if (foto.fehler) return { ok: false, fehler: foto.fehler };
       zeileSchreiben(blatt, kopf, ziel.zeile, f, "ergänzt");
+      foto.aufraeumen();
       oeffentlichAktualisieren();
       return { ok: true, ergebnis: "ergaenzt", titel: f.titel, behalten: f.behalten, verkaufen: f.verkaufen };
     }
@@ -681,6 +684,8 @@ function eintragen(anfrage) {
     if (vorhanden) {
       return { ok: false, code: "vorhanden", fehler: "Dieser Tonie steht schon in deiner Liste.", vorhanden: vorhandenInfo(vorhanden) };
     }
+    const foto = eigenesFotoVorbereiten(anfrage, "", f);
+    if (foto.fehler) return { ok: false, fehler: foto.fehler };
     zeileSchreiben(blatt, kopf, blatt.getLastRow() + 1, f, "erfasst");
     oeffentlichAktualisieren();
     return { ok: true, ergebnis: "neu", titel: f.titel, behalten: f.behalten, verkaufen: f.verkaufen };
@@ -1529,9 +1534,12 @@ function aendern(anfrage) {
       return { ok: false, code: "konflikt", fehler: "Dieser Tonie wurde inzwischen geändert.",
         aktuell: Object.assign(fuerWebsite(t), { pruefen: t.pruefen }) };
     }
+    const foto = eigenesFotoVorbereiten(anfrage, t.eigenesFoto, geprueft.werte);
+    if (foto.fehler) return { ok: false, fehler: foto.fehler };
     const blatt = toniesBlatt();
     const kopf = blatt.getRange(1, 1, 1, blatt.getLastColumn()).getValues()[0].map((k) => String(k).trim());
     zeileSchreiben(blatt, kopf, t.zeile, geprueft.werte, "geändert");
+    foto.aufraeumen();
     oeffentlichAktualisieren();
     const neu = findeNachId(anfrage.id);
     return { ok: true, eintrag: Object.assign(fuerWebsite(neu), { pruefen: neu.pruefen }) };
@@ -1595,4 +1603,76 @@ function sicherungAnlegen() {
   while (it.hasNext()) dateien.push(it.next());
   dateien.sort((a, b) => b.getDateCreated() - a.getDateCreated()).slice(8).forEach((f) => f.setTrashed(true));
   sheet.toast(`Sicherung „${name}“ angelegt.`, "Tonie-Sicherung");
+}
+
+/*
+ * Teil 9: Eigene Fotos im Drive-Ordner "Tonie-Bilder"
+ *
+ * Die Website verkleinert das Foto vorher (800 px, JPEG). Es kommt beim Speichern
+ * mit (anfrage.foto); "fotoEntfernen" leert die Spalte "Eigenes Foto".
+ * Ein ersetztes oder entferntes Foto wandert in den Papierkorb – aber nur, wenn es
+ * in diesem Ordner liegt, damit nie eine andere Datei aus deinem Drive betroffen ist.
+ */
+const BILDER_ORDNER = "Tonie-Bilder";
+const MAX_EIGENES_FOTO_ZEICHEN = 1000000; // ca. 750 KB; ein 800-px-Foto hat meist 100–150 KB
+
+/** Speichert ein neues Foto (falls mitgeschickt) und trägt die Adresse in f ein. */
+function eigenesFotoVorbereiten(anfrage, bisher, f) {
+  const nichts = { aufraeumen() {} };
+  if (!anfrage.foto && !anfrage.fotoEntfernen) return nichts;
+  let neu = "";
+  if (anfrage.foto) {
+    const gespeichert = fotoInDriveSpeichern(anfrage.foto, f.titel);
+    if (gespeichert.fehler) return gespeichert;
+    neu = gespeichert.url;
+  }
+  f.eigenesFoto = neu;
+  // Erst nach dem Schreiben ins Sheet aufräumen: Geht vorher etwas schief, bleibt das alte Foto.
+  return { aufraeumen() { if (bisher && bisher !== neu) altesFotoWegwerfen(bisher); } };
+}
+
+function bilderOrdner() {
+  const ordner = DriveApp.getFoldersByName(BILDER_ORDNER);
+  return ordner.hasNext() ? ordner.next() : DriveApp.createFolder(BILDER_ORDNER);
+}
+
+function fotoInDriveSpeichern(dataUrl, titel) {
+  const fehler = { fehler: "Das Foto ließ sich nicht verwenden. Bitte ein anderes Foto wählen." };
+  const m = String(dataUrl || "").match(/^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/);
+  if (!m || dataUrl.length > MAX_EIGENES_FOTO_ZEICHEN) return fehler;
+  const bytes = Utilities.base64Decode(m[1]);
+  // Echtes JPEG? Die ersten zwei Bytes sind immer FF D8.
+  if (bytes.length < 100 || (bytes[0] & 0xff) !== 0xff || (bytes[1] & 0xff) !== 0xd8) return fehler;
+  const name = String(titel || "Tonie").replace(/[\\/:*?"<>|]/g, " ").slice(0, 80) + " " +
+    Utilities.formatDate(new Date(), "Europe/Berlin", "yyyy-MM-dd HH-mm-ss") + ".jpg";
+  const datei = bilderOrdner().createFile(Utilities.newBlob(bytes, "image/jpeg", name));
+  try {
+    // Die Website lädt das Bild ohne Google-Anmeldung, deshalb "Jeder mit dem Link: ansehen".
+    datei.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (x) {
+    datei.setTrashed(true);
+    return { fehler: "Google Drive erlaubt hier keine Freigabe per Link, deshalb kann die Website das Foto nicht zeigen." };
+  }
+  return { url: "https://lh3.googleusercontent.com/d/" + datei.getId() + "=w800" };
+}
+
+/** Datei-ID aus den üblichen Drive-Adressen */
+function driveId(url) {
+  const m = String(url || "").match(/googleusercontent\.com\/d\/([\w-]{10,})|drive\.google\.com\/.*(?:[?&]id=|\/d\/)([\w-]{10,})/);
+  return m ? m[1] || m[2] : "";
+}
+
+function altesFotoWegwerfen(url) {
+  const id = driveId(url);
+  if (!id) return;
+  try {
+    const datei = DriveApp.getFileById(id);
+    const ordnerId = bilderOrdner().getId();
+    const eltern = datei.getParents();
+    while (eltern.hasNext()) {
+      if (eltern.next().getId() === ordnerId) { datei.setTrashed(true); return; }
+    }
+  } catch (x) {
+    // Datei schon weg oder kein Zugriff: dann gibt es nichts aufzuräumen.
+  }
 }

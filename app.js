@@ -94,14 +94,33 @@
       <span>${esc(buchstabe)}</span></div>`;
   }
 
-  // Der Platzhalter liegt immer unter dem Bild. Lädt das Bild nicht, wird es entfernt
-  // und der Platzhalter ist zu sehen.
+  // Reihenfolge: eigenes Foto → Bild-URL → Platzhalter. Der Platzhalter liegt immer unter
+  // dem Bild. Lädt ein Bild nicht, kommt das nächste; lädt keins, bleibt der Platzhalter.
   function bild(t) {
-    const quelle = t.eigenesFoto || t.bild;
-    const img = quelle
-      ? `<img src="${esc(quelle)}" alt="" loading="lazy" decoding="async" onerror="this.remove()">`
-      : "";
-    return platzhalter(t) + img;
+    const quellen = [t.eigenesFoto, ...ersatzVonDrive(t.eigenesFoto), t.bild].filter(Boolean);
+    if (!quellen.length) return platzhalter(t);
+    const ersatz = quellen.slice(1).join(" ");
+    return platzhalter(t) + `<img src="${esc(quellen[0])}" alt="" loading="lazy" decoding="async"` +
+      `${ersatz ? ` data-ersatz="${esc(ersatz)}"` : ""} onerror="tonieBildFehler(this)">`;
+  }
+  // Fotos aus Google Drive: Klappt die schnelle Bildadresse nicht, die Vorschau-Adresse probieren.
+  function ersatzVonDrive(url) {
+    const m = String(url || "").match(/^https:\/\/lh3\.googleusercontent\.com\/d\/([\w-]+)/);
+    return m ? [`https://drive.google.com/thumbnail?id=${m[1]}&sz=w800`] : [];
+  }
+  window.tonieBildFehler = (img) => {
+    const rest = (img.dataset.ersatz || "").split(" ").filter(Boolean);
+    if (!rest.length) return img.remove();
+    img.dataset.ersatz = rest.slice(1).join(" ");
+    img.src = rest[0];
+  };
+
+  // Knopf zur Quelle: "Auf tonies.com ansehen", sonst "Quelle ansehen (domain)"
+  function quelleKnopf(link) {
+    let host = "";
+    try { host = new URL(link).hostname.replace(/^www\./, ""); } catch (x) { return ""; }
+    const text = /(^|\.)tonies\.com$/.test(host) ? "Auf tonies.com ansehen" : `Quelle ansehen (${host})`;
+    return `<a class="link" href="${esc(link)}" target="_blank" rel="noopener noreferrer">${esc(text)}</a>`;
   }
 
   // "2026-10-20" → "20.10.26"
@@ -163,7 +182,7 @@
         ${verkauf.length ? `<p class="verkauf">${verkauf.join(" · ")}</p>` : ""}
         ${details ? `<p class="details">${details}</p>` : ""}
         ${zustand.entsperrt && t.kommentar ? `<p class="kommentar">${markiert(t.kommentar)}</p>` : ""}
-        ${t.link ? `<a class="link" href="${esc(t.link)}" target="_blank" rel="noopener">Auf tonies.com ansehen</a>` : ""}
+        ${t.link ? quelleKnopf(t.link) : ""}
       </div>
     </li>`;
   }
