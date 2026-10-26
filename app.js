@@ -1,13 +1,13 @@
 // Baut aus der Tonie-Liste die Karten, die Ansichten und die Zähler.
 (function () {
-  const ANSICHTEN = ["alle", "behalten", "verkaufen"];
-  const FILTER = ["reihe", "format", "inhalt", "thema"];
+  const ANSICHTEN = ["alle", "behalten", "verkaufen", "verliehen"];
+  const FILTER = ["reihe", "format", "inhalt", "thema", "zustand", "raritaet"];
 
   const zustand = {
     tonies: [],
     ansicht: "alle",
     suche: "",
-    filter: { reihe: "", format: "", inhalt: "", thema: "" },
+    filter: { reihe: "", format: "", inhalt: "", thema: "", zustand: "", raritaet: "" },
     entsperrt: false, // mit PIN oder Passwort: private Felder sichtbar
   };
 
@@ -18,6 +18,7 @@
     zTonies: document.getElementById("z-tonies"),
     zBehalten: document.getElementById("z-behalten"),
     zVerkaufen: document.getElementById("z-verkaufen"),
+    zVerliehen: document.getElementById("z-verliehen"),
     zaehlerFelder: document.querySelectorAll("[data-zaehler]"),
     suche: document.getElementById("suche"),
     filter: document.querySelectorAll("[data-filter]"),
@@ -48,6 +49,7 @@
   function passtZurAnsicht(t, ansicht) {
     if (ansicht === "behalten") return t.behalten > 0;
     if (ansicht === "verkaufen") return t.verkaufen > 0;
+    if (ansicht === "verliehen") return t.verliehen; // ohne PIN sichtbar: nur "ja", nicht an wen
     return true;
   }
 
@@ -57,7 +59,12 @@
   const SUCHFELDER_PRIVAT = SUCHFELDER.concat([["verliehenAn", 2], ["kommentar", 1]]);
 
   // Ein Feld kann mehrere Werte mit Komma enthalten, z. B. Thema "Märchen, Abenteuer".
-  const werteVon = (t, feld) => String(t[feld] || "").split(",").map((w) => w.trim()).filter(Boolean);
+  // Besonderheiten: Zustand zählt nur beim Verkauf, leere Rarität heißt "Normal".
+  const werteVon = (t, feld) => {
+    if (feld === "zustand") return t.verkaufen > 0 && t.zustand ? [t.zustand] : [];
+    if (feld === "raritaet") return [t.raritaet || "Normal"];
+    return String(t[feld] || "").split(",").map((w) => w.trim()).filter(Boolean);
+  };
 
   function passtZuFiltern(t) {
     return FILTER.every((f) => !zustand.filter[f] || werteVon(t, f).includes(zustand.filter[f]));
@@ -146,6 +153,7 @@
     return `<li class="karte">
       <div class="bild">
         ${bild(t)}
+        ${t.id ? `<a class="bild-link" href="erfassen.html?id=${encodeURIComponent(t.id)}" aria-label="${esc(t.titel)} verwalten"></a>` : ""}
         ${t.format ? `<span class="format">${esc(t.format)}</span>` : ""}
       </div>
       <div class="text">
@@ -179,9 +187,11 @@
     el.zTonies.textContent = sichtbar.length;
     el.zBehalten.textContent = summe("behalten");
     el.zVerkaufen.textContent = summe("verkaufen");
+    el.zVerliehen.textContent = sichtbar.filter((t) => t.verliehen).length;
     // In "Behalten" bzw. "Verkaufen" ist der jeweils andere Zähler nicht aussagekräftig.
     el.zaehlerFelder.forEach((f) => {
       f.hidden = ansicht !== "alle" && f.dataset.zaehler !== ansicht;
+      if (f.dataset.zaehler === "verliehen" && ansicht === "alle") f.hidden = !sichtbar.some((t) => t.verliehen);
     });
 
     el.knoepfe.forEach((k) => k.setAttribute("aria-pressed", k.dataset.ansicht === ansicht));

@@ -11,7 +11,7 @@
   <header class="kopf">
     <p class="zurueck"><a href="./">← Zur Sammlung</a></p>
     <div class="kopfzeile">
-      <h1>Tonie hinzufügen</h1>
+      <h1 id="seitentitel">Tonie hinzufügen</h1>
       <button id="sperren" type="button" class="knopf leise" hidden>Sperren</button>
     </div>
   </header>
@@ -99,6 +99,14 @@
     <!-- 3. Formular (Von Hand und Prüfen eines Treffers) -->
     <section id="bereich-formular" hidden>
       <p id="ergaenzen-titel" class="ergaenzen-titel" hidden></p>
+      <!-- Verwalten: jemand hat den Tonie inzwischen geändert -->
+      <div id="konflikt" class="vorhanden" role="alert" hidden>
+        <p><strong>Dieser Tonie wurde inzwischen geändert</strong> (im Sheet oder auf einem anderen Gerät). Es wurde nichts überschrieben.</p>
+        <div class="knopfreihe">
+          <button type="button" class="knopf leise" data-aktion="konflikt-neu-laden">Neuen Stand laden</button>
+          <button type="button" class="knopf" data-aktion="konflikt-speichern">Trotzdem speichern</button>
+        </div>
+      </div>
 
       <form id="form-tonie" class="karte-flaeche formular" novalidate>
         <div class="feld">
@@ -134,7 +142,12 @@
           <div><label for="f-format">Format</label><input id="f-format" name="format" list="vorschlag-format"></div>
           <div><label for="f-inhalt">Inhalt</label><input id="f-inhalt" name="inhalt" list="vorschlag-inhalt"></div>
           <div><label for="f-thema">Thema</label><input id="f-thema" name="thema" list="vorschlag-thema" placeholder="mehrere mit Komma"></div>
+          <div>
+            <label for="f-raritaet">Rarität</label>
+            <select id="f-raritaet" name="raritaet"><option value="">Normal</option><option>Selten</option><option>Rarität</option><option>Munkelität</option></select>
+          </div>
         </div>
+        <p id="listen-hinweis" class="klein" data-art="hinweis" hidden></p>
 
         <fieldset class="feld anzahl">
           <legend id="anzahl-legende">Anzahl</legend>
@@ -152,19 +165,44 @@
             <p id="neupreis" class="klein" hidden></p>
           </div>
           <div>
-            <label for="f-zustand">Zustand</label>
+            <label for="f-zustand">Zustand (Verkauf)</label>
             <select id="f-zustand" name="zustand">
               <option value="">–</option><option>Neu &amp; OVP</option><option>Neu ohne OVP</option><option>Gebraucht – sehr gut</option><option>Gebraucht – gut</option><option>Gebraucht – akzeptabel</option>
             </select>
           </div>
+          <p id="zustand-hinweis" class="klein" data-art="hinweis" hidden>Tipp: Gib den Zustand für das Exemplar zum Verkauf an.</p>
         </div>
 
+        <fieldset class="feld verleihen">
+          <legend>Verliehen</legend>
+          <div class="zweispaltig">
+            <div><label for="f-verliehenAn">An (Name)</label><input id="f-verliehenAn" name="verliehenAn" autocomplete="off" placeholder="leer = nicht verliehen"></div>
+            <div><label for="f-verliehenAm">Am</label><input id="f-verliehenAm" name="verliehenAm" type="date"></div>
+          </div>
+          <button type="button" class="knopf leise" data-aktion="zurueckgegeben">Zurückgegeben</button>
+        </fieldset>
+
         <div class="feld"><label for="f-kommentar">Kommentar</label><textarea id="f-kommentar" name="kommentar" rows="2"></textarea></div>
+        <div class="feld" id="feld-pruefen" hidden>
+          <label for="f-pruefen">Prüfen (interne Notiz, nur hier sichtbar)</label>
+          <textarea id="f-pruefen" name="pruefen" rows="2"></textarea>
+        </div>
 
         <p id="formular-meldung" class="meldung" role="alert" hidden></p>
         <div class="knopfreihe">
           <button type="button" class="knopf leise" data-aktion="abbrechen">Abbrechen</button>
           <button type="submit" id="eintragen" class="knopf">Eintragen</button>
+        </div>
+        <!-- Nur in "Tonie verwalten" -->
+        <div id="archiv-bereich" class="archiv" hidden>
+          <button type="button" class="knopf leise warnung" data-aktion="archivieren-frage">Archivieren …</button>
+          <div id="archiv-frage" hidden>
+            <p class="klein">Der Tonie verschwindet von der Seite, bleibt aber im Sheet (Spalte „Archiviert am“). Zurückholen: dort die Zelle leeren.</p>
+            <div class="knopfreihe">
+              <button type="button" class="knopf leise" data-aktion="archivieren-nein">Abbrechen</button>
+              <button type="button" class="knopf warnung-voll" data-aktion="archivieren-ja">Ja, archivieren</button>
+            </div>
+          </div>
         </div>
       </form>
     </section>
@@ -172,7 +210,7 @@
     <!-- 4. Fertig -->
     <section id="bereich-fertig" class="karte-flaeche" hidden>
       <p id="fertig-text" class="fertig"></p>
-      <p class="klein">Auf der Sammlungsseite erscheint die Änderung nach etwa 5 Minuten.</p>
+      <p class="klein">Du siehst die Änderung auf der Sammlungsseite sofort. Besucher ohne PIN sehen sie nach spätestens etwa 5 Minuten.</p>
       <div class="knopfreihe">
         <a class="knopf leise" href="./">Zur Sammlung</a>
         <button type="button" class="knopf" data-aktion="naechster">Nächster Tonie</button>

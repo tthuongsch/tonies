@@ -108,9 +108,19 @@
   }
 
   async function start() {
+    const id = new URLSearchParams(location.search).get("id");
+    if (id) {
+      // Erst die Auswahllisten, dann die Werte setzen: sonst fehlt z. B. "Selten" noch in der Auswahl.
+      const [e] = await Promise.all([anfrage("eintrag", { id }), listenLaden()]);
+      if (!e.ok) { zeige("bereich-start"); reiter("suchen"); meldung("such-meldung", e.fehler); }
+      else verwaltenOeffnen(e.eintrag);
+      listeLaden();
+      return;
+    }
     zeige("bereich-start");
     reiter("suchen");
     katalogLaden();
+    listenLaden();
     await listeLaden();
     const b = await anfrage("budget");
     if (b.ok) budgetZeigen(b.budget);
@@ -398,7 +408,11 @@
     if (aktion === "abbrechen") abbrechen();
     if (aktion === "ergaenzen") ergaenzenModus(zustand.vorhanden);
     if (aktion === "auslesen") auslesen();
-    if (aktion === "naechster") abbrechen();
+    if (aktion === "naechster") {
+      // Aus "Tonie verwalten" heraus: neue, leere Seite "Tonie hinzufügen" (ohne ?id=…)
+      if (zustand.modus === "verwalten") location.href = location.pathname + (/testmodus/.test(location.search) ? "?testmodus" : "");
+      else abbrechen();
+    }
     if (aktion === "netz-text") netzSuchenText();
     if (aktion === "foto-los") fotoLos();
     if (aktion === "selbst-suchen") selbstSuchen();
@@ -406,6 +420,7 @@
   });
 
   function abbrechen() {
+    if (zustand.modus === "verwalten") { location.href = "./"; return; }
     $("suchtext").value = "";
     $("treffer").innerHTML = "";
     $("nichts-gefunden").hidden = true;
@@ -422,16 +437,32 @@
   }
 
   // ---------- Formular ----------
-  const FELDER = ["link", "bild", "titel", "reihe", "kollektion", "format", "inhalt", "thema", "preis", "zustand", "kommentar"];
+  const FELDER = ["link", "bild", "titel", "reihe", "kollektion", "format", "inhalt", "thema", "raritaet", "preis", "zustand",
+    "verliehenAn", "verliehenAm", "kommentar", "pruefen"];
 
   function feldSetzen(name, wert) {
-    $("f-" + name).value = wert === null || wert === undefined ? "" : (name === "preis" ? preisText(wert) : String(wert));
+    let w = wert === null || wert === undefined ? "" : (name === "preis" ? preisText(wert) : String(wert));
+    if (name === "raritaet" && w === "Normal") w = "";
+    $("f-" + name).value = w;
+  }
+
+  // Ansicht je Modus: neu, ergänzen (Anzahl erhöhen) oder verwalten (alle Felder eines Tonies ändern)
+  function modusAnzeigen() {
+    const verw = zustand.modus === "verwalten";
+    $("seitentitel").textContent = verw ? "Tonie verwalten" : "Tonie hinzufügen";
+    document.title = verw ? "Tonie verwalten" : "Tonie hinzufügen";
+    $("feld-pruefen").hidden = !verw;
+    $("archiv-bereich").hidden = !verw;
+    $("archiv-frage").hidden = true;
+    $("konflikt").hidden = true;
   }
 
   function formularOeffnen(felder, vorhanden) {
     zustand.modus = "neu";
     zustand.ziel = null;
+    zustand.eintrag = null;
     $("form-tonie").reset();
+    modusAnzeigen();
     FELDER.forEach((f) => feldSetzen(f, felder[f]));
     ["behalten", "verkaufen"].forEach((art) => { $("h-" + art).checked = false; $("f-" + art).value = 1; });
     neupreisZeigen(felder.neupreis);
@@ -439,8 +470,23 @@
     meldung("formular-meldung", "");
     meldung("auslesen-meldung", "");
     bildVorschau();
+    listenHinweis();
     vorhandenZeigen(vorhanden || null);
     zeige("bereich-formular");
+  }
+
+  // "Tonie verwalten": alle Felder des Tonies mit den aktuellen Werten, Anzahlen absolut.
+  function verwaltenOeffnen(e) {
+    formularOeffnen(e, null);
+    zustand.modus = "verwalten";
+    zustand.eintrag = e;
+    modusAnzeigen();
+    ["behalten", "verkaufen"].forEach((art) => {
+      $("h-" + art).checked = e[art] > 0;
+      $("f-" + art).value = e[art] > 0 ? e[art] : 1;
+    });
+    beschriftungen();
+    window.scrollTo(0, 0);
   }
 
   function neupreisZeigen(neupreis) {
@@ -454,7 +500,7 @@
     $("text-behalten").textContent = erg ? "+ behalten" : "Behalten";
     $("text-verkaufen").textContent = erg ? "+ verkaufen" : "Verkaufen";
     $("anzahl-legende").textContent = erg ? "Hinzufügen" : "Anzahl";
-    $("eintragen").textContent = erg ? "Eintrag aktualisieren" : "Eintragen";
+    $("eintragen").textContent = erg ? "Eintrag aktualisieren" : zustand.modus === "verwalten" ? "Speichern" : "Eintragen";
     $("ergaenzen-titel").hidden = !erg;
     anzahlAktualisieren();
   }
@@ -468,14 +514,66 @@
     ["behalten", "verkaufen"].forEach((art) => { $("f-" + art).disabled = !$("h-" + art).checked; });
     const n = anzahlen();
     const ziel = zustand.ziel;
-    $("verkaufsfelder").hidden = !(n.verkaufen > 0 || (ziel && ziel.verkaufen > 0));
+    const verkauf = n.verkaufen > 0 || (ziel && ziel.verkaufen > 0);
+    $("verkaufsfelder").hidden = !verkauf;
+    // Zustand gehört nur zum Exemplar im Verkauf: freundlicher Hinweis, blockiert aber nicht.
+    $("zustand-hinweis").hidden = !(verkauf && !$("f-zustand").value);
     if (ziel) {
       $("anzahl-vorschau").textContent = "Danach: " + anzahlText({ behalten: ziel.behalten + n.behalten, verkaufen: ziel.verkaufen + n.verkaufen });
     } else {
       $("anzahl-vorschau").textContent = n.behalten || n.verkaufen ? "" : "Ohne Anzahl erscheint der Tonie mit „Anzahl fehlt“.";
     }
   }
-  ["h-behalten", "h-verkaufen", "f-behalten", "f-verkaufen"].forEach((id) => $(id).addEventListener("input", anzahlAktualisieren));
+  ["h-behalten", "h-verkaufen", "f-behalten", "f-verkaufen", "f-zustand"].forEach((id) => $(id).addEventListener("input", anzahlAktualisieren));
+
+  // ---------- Verleihen ----------
+  // Name eingetragen, Datum leer → heute (deutsche Zeit). "Zurückgegeben" leert beides.
+  function heuteBerlin() {
+    const teile = new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit" })
+      .formatToParts(new Date()).reduce((o, t) => (o[t.type] = t.value, o), {});
+    return `${teile.year}-${teile.month}-${teile.day}`;
+  }
+  $("f-verliehenAn").addEventListener("input", () => {
+    if ($("f-verliehenAn").value.trim() && !$("f-verliehenAm").value) $("f-verliehenAm").value = heuteBerlin();
+    if (!$("f-verliehenAn").value.trim()) $("f-verliehenAm").value = "";
+  });
+
+  // ---------- Auswahllisten aus dem Tab "Listen" ----------
+  zustand.listen = null;
+  async function listenLaden() {
+    const a = await anfrage("listen", {}, { leise: true });
+    if (!a.ok) return;
+    zustand.listen = a.listen;
+    const optionen = (werte) => werte.map((w) => `<option value="${esc(w)}">`).join("");
+    [["format", "Format"], ["inhalt", "Inhalt"], ["thema", "Thema"]].forEach(([feld, name]) => {
+      const vorhanden = [...$("vorschlag-" + feld).options].map((o) => o.value);
+      const alle = [...new Set((a.listen[name] || []).concat(vorhanden))];
+      $("vorschlag-" + feld).innerHTML = optionen(alle);
+    });
+    const auswahl = (id, werte, leer) => {
+      const alt = $(id).value;
+      $(id).innerHTML = `<option value="">${leer}</option>` + werte.filter((w) => w !== "Normal")
+        .map((w) => `<option>${esc(w)}</option>`).join("");
+      $(id).value = alt;
+    };
+    auswahl("f-zustand", a.listen["Zustand"] || [], "–");
+    auswahl("f-raritaet", a.listen["Rarität"] || [], "Normal");
+  }
+
+  // Werte, die nicht in den Listen stehen, sind erlaubt, bekommen aber einen kurzen Hinweis.
+  function listenHinweis() {
+    const l = zustand.listen;
+    if (!l) return ($("listen-hinweis").hidden = true);
+    const neu = [];
+    [["format", "Format"], ["inhalt", "Inhalt"], ["thema", "Thema"]].forEach(([feld, name]) => {
+      $("f-" + feld).value.split(",").map((w) => w.trim()).filter(Boolean)
+        .forEach((w) => { if (!(l[name] || []).includes(w)) neu.push(`„${w}“`); });
+    });
+    $("listen-hinweis").hidden = !neu.length;
+    $("listen-hinweis").textContent = neu.length
+      ? `${neu.join(", ")} steht nicht im Tab „Listen“ – wird trotzdem so übernommen.` : "";
+  }
+  ["f-format", "f-inhalt", "f-thema"].forEach((id) => $(id).addEventListener("change", listenHinweis));
 
   // ---------- Doppelte ----------
   function vereinfachen(text) {
@@ -553,6 +651,7 @@
   function formularWerte() {
     const w = {};
     FELDER.forEach((f) => { w[f] = $("f-" + f).value.trim(); });
+    if (zustand.modus !== "verwalten") delete w.pruefen;
     return w;
   }
 
@@ -565,6 +664,7 @@
       return;
     }
     const n = anzahlen();
+    if (zustand.modus === "verwalten") return speichern(Object.assign(felder, n), false);
     let daten;
     if (zustand.modus === "ergaenzen") {
       const ziel = zustand.ziel;
@@ -586,6 +686,41 @@
       : `<strong>${esc(a.titel)}</strong> ist eingetragen${a.behalten || a.verkaufen ? ": " + anzahlText(a) : ""}.`;
     zeige("bereich-fertig");
     listeLaden();
+  });
+
+  // ---------- Tonie verwalten: speichern, Konflikt, archivieren ----------
+  async function speichern(felder, erzwingen) {
+    const e = zustand.eintrag;
+    const a = await anfrage("aendern", { id: e.id, stand: e.geaendertAm, erzwingen, felder });
+    if (!a.ok && a.code === "konflikt") {
+      zustand.konflikt = { aktuell: a.aktuell, felder };
+      $("konflikt").hidden = false;
+      return window.scrollTo(0, 0);
+    }
+    if (!a.ok) return meldung("formular-meldung", a.fehler);
+    zustand.eintrag = a.eintrag;
+    $("fertig-text").innerHTML = `<strong>${esc(a.eintrag.titel)}</strong> ist gespeichert.`;
+    zeige("bereich-fertig");
+  }
+
+  async function archivieren() {
+    const e = zustand.eintrag;
+    const a = await anfrage("archivieren", { id: e.id });
+    if (!a.ok) return meldung("formular-meldung", a.fehler);
+    $("fertig-text").innerHTML = `<strong>${esc(a.titel)}</strong> ist archiviert und erscheint nicht mehr auf der Seite.`;
+    zeige("bereich-fertig");
+  }
+
+  document.addEventListener("click", (ev) => {
+    const k = ev.target.closest("[data-aktion]");
+    if (!k) return;
+    const aktion = k.dataset.aktion;
+    if (aktion === "zurueckgegeben") { $("f-verliehenAn").value = ""; $("f-verliehenAm").value = ""; }
+    if (aktion === "konflikt-neu-laden") verwaltenOeffnen(zustand.konflikt.aktuell);
+    if (aktion === "konflikt-speichern") { $("konflikt").hidden = true; speichern(zustand.konflikt.felder, true); }
+    if (aktion === "archivieren-frage") $("archiv-frage").hidden = false;
+    if (aktion === "archivieren-nein") $("archiv-frage").hidden = true;
+    if (aktion === "archivieren-ja") archivieren();
   });
 
   // ---------- Hilfen ----------

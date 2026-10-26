@@ -110,7 +110,7 @@ body {
 }
 @media (min-width: 900px) {
   .werkzeuge { grid-template-columns: minmax(260px, 1fr) 2fr; align-items: center; }
-  .filter { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .filter { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .zuruecksetzen { grid-column: 1 / -1; }
 }
 
@@ -447,3 +447,13 @@ mark { background: #ffe58a; color: inherit; border-radius: 3px; padding: 0 1px; 
 .marke.gesperrt { border: 1px dashed var(--linie); background: var(--flaeche); color: var(--leise); font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
 .marke.raritaet { background: #fff3c4; color: #8a6100; }
 .marke.verliehen { background: #e8e3fb; color: #4b3a99; }
+
+/* Verleihen, Verwalten, Archivieren */
+fieldset.verleihen { border: 1px solid var(--linie); border-radius: 10px; padding: 10px 12px 12px; display: grid; gap: 10px; }
+fieldset.verleihen legend { font-weight: 600; font-size: 0.9rem; padding: 0 4px; }
+fieldset.verleihen .knopf { justify-self: start; }
+.archiv { border-top: 1px solid var(--linie); padding-top: 12px; }
+.knopf.warnung { color: var(--fehlt); }
+.knopf.warnung-voll { background: var(--fehlt); }
+.bild-link { display: block; position: absolute; inset: 0; }
+.bild-link:focus-visible { outline: 3px solid var(--akzent); outline-offset: -3px; }

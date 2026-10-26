@@ -396,7 +396,7 @@ const FELDER = {
   "Link": "link", "Bild-URL": "bild", "Preis (€)": "preis", "Zustand": "zustand", "Kommentar": "kommentar",
   "ID": "id", "Rarität": "raritaet", "Verliehen an": "verliehenAn", "Verliehen am": "verliehenAm",
   "Hinzugefügt am": "hinzugefuegtAm", "Geändert am": "geaendertAm", "Eigenes Foto": "eigenesFoto",
-  "Archiviert am": "archiviertAm",
+  "Archiviert am": "archiviertAm", "Prüfen": "pruefen",
 };
 // Nur diese Felder dürfen ohne PIN die Website erreichen (Tab "Öffentlich", CSV).
 const PRIVATE_FELDER = ["verliehenAn", "verliehenAm", "kommentar", "preis"];
@@ -435,6 +435,10 @@ function doPost(e) {
       case "auswaehlen": return alsJson(fotoAuswaehlen(anfrage));
       case "vorsichten": return alsJson(fotoVorsichten(anfrage));
       case "netz": return alsJson(imNetzSuchen(anfrage));
+      case "eintrag": return alsJson(eintragLesen(anfrage.id));
+      case "aendern": return alsJson(aendern(anfrage));
+      case "archivieren": return alsJson(archivieren(anfrage));
+      case "listen": return alsJson({ ok: true, listen: listenLesen() });
     }
     return alsJson({ ok: false, fehler: "Unbekannte Aktion." });
   } catch (x) {
@@ -539,7 +543,7 @@ function eigeneListe() {
     t.reihe = String(t.reihe || "").trim();
     if (!t.titel && !t.reihe) continue;
     ["kollektion", "format", "inhalt", "thema", "link", "bild", "zustand", "kommentar", "id", "raritaet",
-      "verliehenAn", "eigenesFoto"].forEach((f) => { t[f] = String(t[f] === undefined ? "" : t[f]).trim(); });
+      "verliehenAn", "eigenesFoto", "pruefen"].forEach((f) => { t[f] = String(t[f] === undefined ? "" : t[f]).trim(); });
     t.behalten = anzahlWert(t.behalten) || 0;
     t.verkaufen = anzahlWert(t.verkaufen) || 0;
     t.preis = preisWert(t.preis);
@@ -708,7 +712,7 @@ function zeileSchreiben(blatt, kopf, zeile, f, wie) {
     neu[sG] = `=N(${spaltenBuchstabe(sB)}${zeile})+N(${spaltenBuchstabe(sV)}${zeile})`;
   }
   const sP = spalte("Prüfen");
-  if (sP >= 0) {
+  if (sP >= 0 && (wie === "erfasst" || wie === "ergänzt")) {
     const datum = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd.MM.yyyy");
     const vermerk = `Über Website ${wie} am ${datum}.`;
     neu[sP] = bisher[sP] ? `${bisher[sP]} ${vermerk}` : vermerk;
@@ -742,6 +746,19 @@ function felderPruefen(roh) {
     w.raritaet = String(roh.raritaet || "").trim();
     if (w.raritaet && RARITAETEN.indexOf(w.raritaet) < 0) return { fehler: "Rarität bitte aus der Liste wählen." };
   }
+  // Verleihen: ein Name genügt; ohne Datum gilt heute. Ohne Name ("Zurückgegeben") ist auch das Datum leer.
+  if (roh.verliehenAn !== undefined) {
+    w.verliehenAn = text(roh.verliehenAn, 100);
+    const d = String(roh.verliehenAm || "").trim();
+    if (!w.verliehenAn) w.verliehenAm = "";
+    else if (!d) w.verliehenAm = heute();
+    else {
+      const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!m) return { fehler: "„Verliehen am“ bitte als Datum angeben." };
+      w.verliehenAm = new Date(+m[1], +m[2] - 1, +m[3]);
+    }
+  }
+  if (roh.pruefen !== undefined) w.pruefen = text(roh.pruefen, 1000);
   return { werte: w };
 }
 
@@ -1472,4 +1489,110 @@ function onEdit(e) {
     if (s("Hinzugefügt am") >= 0 && !z[s("Hinzugefügt am")]) blatt.getRange(zeile, s("Hinzugefügt am") + 1).setValue(jetzt);
   }
   oeffentlichAktualisieren();
+}
+
+
+/* ------------------------------------------------------------------
+ * Teil 8: Tonie verwalten, Archivieren, Listen, Sicherungskopie
+ * ------------------------------------------------------------------ */
+
+function heute() {
+  const t = Utilities.formatDate(new Date(), "Europe/Berlin", "yyyy-MM-dd").split("-");
+  return new Date(+t[0], +t[1] - 1, +t[2]);
+}
+
+function findeNachId(id, liste) {
+  return (liste || eigeneListe()).find((t) => t.id && t.id === String(id || "").trim()) || null;
+}
+
+/** Ein Tonie mit allen Feldern, auch "Prüfen" (nur mit Passwort). */
+function eintragLesen(id) {
+  const t = findeNachId(id);
+  if (!t) return { ok: false, fehler: "Diesen Tonie gibt es nicht (mehr). Vielleicht wurde er archiviert." };
+  return { ok: true, eintrag: Object.assign(fuerWebsite(t), { pruefen: t.pruefen }) };
+}
+
+/**
+ * Speichert alle Felder eines Tonies. "stand" ist "Geändert am" beim Laden:
+ * Wurde der Tonie seitdem geändert (im Sheet oder auf einem anderen Gerät),
+ * wird nichts überschrieben, sondern der aktuelle Stand zurückgegeben.
+ */
+function aendern(anfrage) {
+  const geprueft = felderPruefen(anfrage.felder || {});
+  if (geprueft.fehler) return { ok: false, fehler: geprueft.fehler };
+  const sperre = LockService.getScriptLock();
+  sperre.waitLock(20000);
+  try {
+    const t = findeNachId(anfrage.id);
+    if (!t) return { ok: false, fehler: "Diesen Tonie gibt es nicht (mehr). Vielleicht wurde er archiviert." };
+    if (!anfrage.erzwingen && String(anfrage.stand || "") !== t.geaendertAm) {
+      return { ok: false, code: "konflikt", fehler: "Dieser Tonie wurde inzwischen geändert.",
+        aktuell: Object.assign(fuerWebsite(t), { pruefen: t.pruefen }) };
+    }
+    const blatt = toniesBlatt();
+    const kopf = blatt.getRange(1, 1, 1, blatt.getLastColumn()).getValues()[0].map((k) => String(k).trim());
+    zeileSchreiben(blatt, kopf, t.zeile, geprueft.werte, "geändert");
+    oeffentlichAktualisieren();
+    const neu = findeNachId(anfrage.id);
+    return { ok: true, eintrag: Object.assign(fuerWebsite(neu), { pruefen: neu.pruefen }) };
+  } finally {
+    sperre.releaseLock();
+  }
+}
+
+/** Blendet einen Tonie aus (Spalte "Archiviert am"); er bleibt im Sheet und lässt sich dort zurückholen. */
+function archivieren(anfrage) {
+  const sperre = LockService.getScriptLock();
+  sperre.waitLock(20000);
+  try {
+    const t = findeNachId(anfrage.id);
+    if (!t) return { ok: false, fehler: "Diesen Tonie gibt es nicht (mehr)." };
+    const blatt = toniesBlatt();
+    const kopf = blatt.getRange(1, 1, 1, blatt.getLastColumn()).getValues()[0].map((k) => String(k).trim());
+    if (kopf.indexOf("Archiviert am") < 0) return { ok: false, fehler: "Bitte zuerst „Datenmodell einrichten“ ausführen." };
+    blatt.getRange(t.zeile, kopf.indexOf("Archiviert am") + 1).setValue(new Date());
+    if (kopf.indexOf("Geändert am") >= 0) blatt.getRange(t.zeile, kopf.indexOf("Geändert am") + 1).setValue(new Date());
+    oeffentlichAktualisieren();
+    return { ok: true, titel: t.titel };
+  } finally {
+    sperre.releaseLock();
+  }
+}
+
+/** Auswahllisten aus dem Tab "Listen" (eine Spalte je Liste); fehlt etwas, gelten die festen Werte. */
+function listenLesen() {
+  const ergebnis = { "Format": [], "Inhalt": [], "Thema": [], "Zustand": ZUSTAENDE.slice(), "Rarität": RARITAETEN.slice() };
+  const listen = SpreadsheetApp.getActive().getSheetByName("Listen");
+  if (listen && listen.getLastColumn()) {
+    const werte = listen.getDataRange().getValues();
+    werte[0].forEach((k, s) => {
+      const name = String(k).trim();
+      if (!name) return;
+      const spalte = werte.slice(1).map((z) => String(z[s] === undefined ? "" : z[s]).trim()).filter(Boolean);
+      if (spalte.length) ergebnis[name] = spalte;
+    });
+  }
+  // Fehlt eine Liste im Tab "Listen", die Werte nehmen, die im Sheet schon vorkommen.
+  const liste = eigeneListe();
+  [["Format", "format"], ["Inhalt", "inhalt"], ["Thema", "thema"]].forEach(([name, feld]) => {
+    if (ergebnis[name].length) return;
+    const werte = {};
+    liste.forEach((t) => String(t[feld] || "").split(",").map((w) => w.trim()).filter(Boolean).forEach((w) => { werte[w] = true; }));
+    ergebnis[name] = Object.keys(werte).sort((a, b) => a.localeCompare(b, "de"));
+  });
+  return ergebnis;
+}
+
+/** Wöchentliche Kopie des ganzen Sheets in den Drive-Ordner "Tonie-Sicherungen"; die 8 neuesten bleiben. */
+function sicherungAnlegen() {
+  const sheet = SpreadsheetApp.getActive();
+  const ordnerListe = DriveApp.getFoldersByName("Tonie-Sicherungen");
+  const ordner = ordnerListe.hasNext() ? ordnerListe.next() : DriveApp.createFolder("Tonie-Sicherungen");
+  const name = "Tonie-Sicherung " + Utilities.formatDate(new Date(), "Europe/Berlin", "yyyy-MM-dd HH:mm");
+  DriveApp.getFileById(sheet.getId()).makeCopy(name, ordner);
+  const dateien = [];
+  const it = ordner.getFiles();
+  while (it.hasNext()) dateien.push(it.next());
+  dateien.sort((a, b) => b.getDateCreated() - a.getDateCreated()).slice(8).forEach((f) => f.setTrashed(true));
+  sheet.toast(`Sicherung „${name}“ angelegt.`, "Tonie-Sicherung");
 }

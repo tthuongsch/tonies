@@ -22,6 +22,7 @@ function onOpen() {
     .addItem("Katalog von tonies.com aktualisieren", "katalogAktualisieren")
     .addItem("Datenmodell einrichten (einmalig)", "datenmodellEinrichten")
     .addItem("Tab „Öffentlich“ aktualisieren", "oeffentlichAktualisieren")
+    .addItem("Sicherungskopie jetzt anlegen", "sicherungAnlegen")
     .addItem("Automatik einschalten", "automatikEinschalten")
     .addToUi();
 }
@@ -101,6 +102,9 @@ function automatikEinschalten() {
   if (vorhanden.indexOf("oeffentlichAktualisieren") < 0) {
     ScriptApp.newTrigger("oeffentlichAktualisieren").timeBased().everyMinutes(10).create();
   }
+  if (vorhanden.indexOf("sicherungAnlegen") < 0) {
+    ScriptApp.newTrigger("sicherungAnlegen").timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(3).create();
+  }
   SpreadsheetApp.getActive().toast(
-    "Bilder stündlich, Katalog täglich gegen 4 Uhr, Tab „Öffentlich“ alle 10 Minuten.", "Tonie-Automatik");
+    "Bilder stündlich, Katalog täglich, Tab „Öffentlich“ alle 10 Minuten, Sicherungskopie sonntags.", "Tonie-Automatik");
 }
