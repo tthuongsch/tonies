@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tonie hinzufügen</title>
   <meta name="robots" content="noindex, nofollow">
-  <link rel="stylesheet" href="style.css">
+  <!-- Versionsnummer (?v=…) bei jeder neuen Fassung erhöhen: Dann lädt der Browser die Dateien neu
+       statt eine alte Fassung aus dem Zwischenspeicher zu mischen. -->
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body class="erfassen">
   <header class="kopf">
@@ -241,8 +243,8 @@
     <datalist id="vorschlag-thema"></datalist>
   </main>
 
-  <script src="config.js"></script>
-  <script src="suche.js"></script>
+  <script src="config.js?v=5"></script>
+  <script src="suche.js?v=5"></script>
   <script>
     // Testmodus nur lokal: echte Abläufe gegen nachgebautes Sheet, ohne Google.
     if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && /testmodus/.test(location.search)) {
@@ -250,6 +252,6 @@
         '<script src="tools/gs_attrappe.js"><\/script><script src="tools/erfassen_testmodus.js"><\/script>');
     }
   </script>
-  <script src="erfassen.js"></script>
+  <script src="erfassen.js?v=5"></script>
 </body>
 </html>
