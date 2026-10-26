@@ -31,7 +31,7 @@ body {
 .kopf {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 20px 16px 8px;
+  padding: 14px 16px 8px;
 }
 .kopf h1 {
   margin: 0 0 14px;
@@ -73,11 +73,6 @@ body {
   white-space: nowrap;
 }
 
-.werkzeuge {
-  display: grid;
-  gap: 8px;
-  margin-top: 14px;
-}
 .suche input,
 .filter select {
   width: 100%;
@@ -91,46 +86,98 @@ body {
 }
 .suche input:focus-visible,
 .filter select:focus-visible { outline: 3px solid var(--akzent); outline-offset: 1px; }
-.filter {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+
+/* Oben festgehalten: Titel, Schloss, Menü, Suche */
+.kopf-fest {
+  position: sticky; top: 0; z-index: 10;
+  background: var(--hintergrund);
+  border-bottom: 1px solid var(--linie);
 }
-.zuruecksetzen {
-  justify-self: start;
-  font: inherit;
-  font-size: 0.9rem;
-  font-weight: 600;
-  padding: 4px 0;
-  border: 0;
-  background: none;
-  color: var(--akzent);
-  cursor: pointer;
-  text-decoration: underline;
+.kopf-innen { max-width: 1200px; margin: 0 auto; padding: 12px 16px; display: grid; gap: 10px; }
+.kopf-fest h1 { margin: 0; font-size: clamp(1.3rem, 4vw, 1.9rem); letter-spacing: -0.01em; }
+.kopf-fest .kopf-knoepfe { position: relative; }
+.rund {
+  width: 44px; height: 44px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; border: 1px solid var(--linie); background: var(--flaeche);
+  color: var(--text); font: inherit; font-size: 1.1rem; cursor: pointer;
 }
-@media (min-width: 900px) {
-  .werkzeuge { grid-template-columns: minmax(260px, 1fr) 2fr; align-items: center; }
-  .filter { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .zuruecksetzen { grid-column: 1 / -1; }
+.rund:focus-visible, .pille:focus-within, .menue a:focus-visible, .menue button:focus-visible { outline: 3px solid var(--akzent); outline-offset: 2px; }
+
+/* Menü ☰ */
+.menue {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 20;
+  min-width: 230px; padding: 6px; display: grid;
+  background: var(--flaeche); border: 1px solid var(--linie); border-radius: 12px; box-shadow: var(--schatten);
+}
+.menue a, .menue button, .menue .spaeter {
+  display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 8px;
+  font: inherit; text-align: left; color: var(--text); text-decoration: none; background: none; border: 0; cursor: pointer;
+}
+.menue a:hover, .menue button:hover { background: var(--hintergrund); }
+.menue .sym { width: 1.6em; flex: none; text-align: center; font-weight: 700; color: var(--akzent); }
+.menue .spaeter { color: var(--leise); opacity: 0.7; cursor: default; font-size: 0.9rem; }
+
+/* Zeile mit Ansichten, Filter und Sortierung */
+.leiste { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.ansichten { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.ansichten button { white-space: nowrap; min-height: 36px; }
+.leiste-knoepfe { display: flex; gap: 8px; flex: 1 1 100%; }
+.pille {
+  flex: 1; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 0 14px; border-radius: 999px; border: 1px solid var(--linie); background: var(--flaeche);
+  color: var(--text); font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.pille.an { border-color: var(--akzent); color: var(--akzent); }
+.sortierung { position: relative; }
+.sortierung select {
+  appearance: none; border: 0; background: none; font: inherit; font-weight: 600; color: inherit;
+  padding: 0 4px; cursor: pointer; max-width: 100%;
+}
+.sortierung select:focus { outline: none; }
+/* Handy: die vier Ansichten teilen sich die volle Breite (wischbar, falls es mal mehr werden) */
+@media (max-width: 699px) {
+  .ansichten { display: flex; width: 100%; padding: 3px; gap: 2px; }
+  .ansichten button { flex: 1 1 auto; padding: 8px 6px; font-size: 0.95rem; }
+}
+@media (min-width: 700px) {
+  .leiste-knoepfe { flex: 0 0 auto; margin-left: auto; }
+  .pille { flex: none; }
 }
 
-.zaehler {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 24px;
-  margin: 16px 0 0;
+/* Aktive Filter als Chips zum Entfernen */
+.aktive-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.filter-chip {
+  min-height: 36px; padding: 0 12px; border-radius: 999px; font: inherit; font-size: 0.9rem; font-weight: 600;
+  border: 1px solid #b9cdea; background: #e8f0fb; color: #1d4f91; cursor: pointer;
 }
-.zaehler div { display: flex; align-items: baseline; gap: 6px; }
-.zaehler dd {
-  order: -1;
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
+.filter-chip.leise { background: none; border-color: transparent; color: var(--akzent); text-decoration: underline; }
+.filter-chip:focus-visible { outline: 3px solid var(--akzent); outline-offset: 1px; }
+
+.zaehler { margin: 12px 0 0; color: var(--leise); font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+
+/* Filterfenster: am Handy unten angedockt, am Computer in der Mitte */
+.fenster.blatt { width: min(100vw, 560px); }
+.blatt-kopf { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.blatt-kopf h2 { margin: 0; }
+.filter { display: grid; gap: 10px; }
+.filter label { display: grid; gap: 4px; font-weight: 600; font-size: 0.9rem; }
+.blatt .knopfreihe { flex-wrap: nowrap; }
+.blatt .knopfreihe .knopf:last-child { flex: 1 1 0; min-width: 0; }
+@media (max-width: 699px) {
+  .fenster.blatt {
+    margin: auto 0 0; width: 100%; max-width: 100%; max-height: 85vh;
+    border-radius: 18px 18px 0 0; padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  }
+  .blatt[open] { animation: hochfahren 0.22s ease-out; }
 }
-.zaehler dt { color: var(--leise); }
-.zaehler [data-zaehler="behalten"] dd { color: var(--behalten); }
-.zaehler [data-zaehler="verkaufen"] dd { color: var(--verkaufen); }
+@media (min-width: 700px) { .filter { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@keyframes hochfahren { from { transform: translateY(100%); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .blatt[open] { animation: none; } }
+.info-text { color: var(--text); font-size: 0.95rem; }
+.info-text ul { padding-left: 20px; margin: 0; display: grid; gap: 6px; }
+.info-text p { margin: 0 0 8px; }
+.info-text p:last-child { margin: 10px 0 0; color: var(--leise); }
 
 /* ---------- Karten ---------- */
 main {

@@ -10,44 +10,54 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="kopf">
-    <div class="kopfzeile">
-      <h1>Meine Tonie-Sammlung</h1>
-      <div class="kopf-knoepfe">
-        <button id="schloss" type="button" class="knopf leise schloss" aria-label="Mit PIN entsperren">🔒</button>
-        <a class="knopf leise hinzufuegen" href="erfassen.html">+ Hinzufügen</a>
+  <!-- Bleibt beim Scrollen oben: Titel, Schloss, Menü und Suche -->
+  <div class="kopf-fest">
+    <div class="kopf-innen">
+      <div class="kopfzeile">
+        <h1>Meine Tonie-Sammlung</h1>
+        <div class="kopf-knoepfe">
+          <button id="schloss" type="button" class="rund schloss" aria-label="Mit PIN entsperren">🔒</button>
+          <button id="menue-knopf" type="button" class="rund" aria-label="Menü" aria-expanded="false" aria-controls="menue">
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <nav id="menue" class="menue" aria-label="Menü" hidden>
+            <a href="erfassen.html"><span class="sym" aria-hidden="true">＋</span>Tonie hinzufügen</a>
+            <button type="button" data-info="fototipps"><span class="sym" aria-hidden="true">📷</span>Foto-Tipps</button>
+            <button type="button" data-info="hilfe"><span class="sym" aria-hidden="true">?</span>Hilfe</button>
+            <span class="spaeter" aria-disabled="true"><span class="sym" aria-hidden="true"></span>Verkaufsseite (später)</span>
+            <span class="spaeter" aria-disabled="true"><span class="sym" aria-hidden="true"></span>Statistik (später)</span>
+          </nav>
+        </div>
       </div>
-    </div>
-
-    <nav class="ansichten" aria-label="Ansicht">
-      <button type="button" data-ansicht="alle">Alle</button>
-      <button type="button" data-ansicht="behalten">Behalten</button>
-      <button type="button" data-ansicht="verkaufen">Verkaufen</button>
-      <button type="button" data-ansicht="verliehen">Verliehen</button>
-    </nav>
-
-    <div class="werkzeuge">
       <label class="suche">
         <span class="unsichtbar">Suche</span>
-        <input id="suche" type="search" placeholder="Suche nach Titel, Reihe, Kollektion …" autocomplete="off">
+        <input id="suche" type="search" placeholder="Suchen: Titel, Reihe, Thema …" autocomplete="off">
       </label>
-      <div class="filter">
-        <label><span class="unsichtbar">Reihe</span><select data-filter="reihe"><option value="">Alle Reihen</option></select></label>
-        <label><span class="unsichtbar">Format</span><select data-filter="format"><option value="">Alle Formate</option></select></label>
-        <label><span class="unsichtbar">Inhalt</span><select data-filter="inhalt"><option value="">Alle Inhalte</option></select></label>
-        <label><span class="unsichtbar">Thema</span><select data-filter="thema"><option value="">Alle Themen</option></select></label>
-        <label><span class="unsichtbar">Zustand (Verkauf)</span><select data-filter="zustand"><option value="">Alle Zustände</option></select></label>
-        <label><span class="unsichtbar">Rarität</span><select data-filter="raritaet"><option value="">Alle Raritäten</option></select></label>
-      </div>
-      <button id="zuruecksetzen" type="button" class="zuruecksetzen" hidden>Filter zurücksetzen</button>
     </div>
+  </div>
 
-    <dl class="zaehler" aria-live="polite">
-      <div><dt>Tonies</dt><dd id="z-tonies">–</dd></div>
-      <div data-zaehler="behalten"><dt>zum Behalten</dt><dd id="z-behalten">–</dd></div>
-      <div data-zaehler="verkaufen"><dt>zum Verkaufen</dt><dd id="z-verkaufen">–</dd></div>
-      <div data-zaehler="verliehen"><dt>verliehen</dt><dd id="z-verliehen">–</dd></div>
-    </dl>
+  <header class="kopf">
+    <div class="leiste">
+      <nav class="ansichten" aria-label="Ansicht">
+        <button type="button" data-ansicht="alle">Alle</button>
+        <button type="button" data-ansicht="behalten">Behalten</button>
+        <button type="button" data-ansicht="verkaufen">Verkaufen</button>
+        <button type="button" data-ansicht="verliehen">Verliehen</button>
+      </nav>
+      <div class="leiste-knoepfe">
+        <button id="filter-knopf" type="button" class="pille" aria-haspopup="dialog">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <span id="filter-text">Filter</span>
+        </button>
+        <label class="pille sortierung">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="unsichtbar">Sortierung</span>
+          <select id="sortierung"></select>
+        </label>
+      </div>
+    </div>
+    <div id="aktive-filter" class="aktive-filter" hidden></div>
+    <p id="zaehler" class="zaehler" aria-live="polite">–</p>
   </header>
 
   <main>
@@ -73,6 +83,35 @@
       </div>
       <div class="knopfreihe"><button class="knopf leise" value="schliessen">Schließen</button></div>
     </form>
+  </dialog>
+
+  <!-- Filterfenster: am Handy von unten, am Computer in der Mitte -->
+  <dialog id="filter-fenster" class="fenster blatt" aria-labelledby="filter-titel">
+    <div class="blatt-kopf">
+      <h2 id="filter-titel">Filter</h2>
+      <button type="button" class="rund" data-schliessen aria-label="Schließen">✕</button>
+    </div>
+    <div class="filter">
+      <label>Reihe<select data-filter="reihe"><option value="">alle</option></select></label>
+      <label>Format<select data-filter="format"><option value="">alle</option></select></label>
+      <label>Inhalt<select data-filter="inhalt"><option value="">alle</option></select></label>
+      <label>Thema<select data-filter="thema"><option value="">alle</option></select></label>
+      <label>Zustand (Verkauf)<select data-filter="zustand"><option value="">alle</option></select></label>
+      <label>Rarität<select data-filter="raritaet"><option value="">alle</option></select></label>
+    </div>
+    <div class="knopfreihe">
+      <button id="filter-zuruecksetzen" type="button" class="knopf leise">Zurücksetzen</button>
+      <button id="filter-anzeigen" type="button" class="knopf" data-schliessen>Ergebnisse anzeigen</button>
+    </div>
+  </dialog>
+
+  <!-- Foto-Tipps und Hilfe aus dem Menü -->
+  <dialog id="info-fenster" class="fenster" aria-labelledby="info-titel">
+    <div class="blatt-kopf">
+      <h2 id="info-titel"></h2>
+      <button type="button" class="rund" data-schliessen aria-label="Schließen">✕</button>
+    </div>
+    <div id="info-text" class="info-text"></div>
   </dialog>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>

@@ -8,6 +8,7 @@
     ansicht: "alle",
     suche: "",
     filter: { reihe: "", format: "", inhalt: "", thema: "", zustand: "", raritaet: "" },
+    sortierung: "titel",
     entsperrt: false, // mit PIN oder Passwort: private Felder sichtbar
   };
 
@@ -15,14 +16,19 @@
     karten: document.getElementById("karten"),
     hinweis: document.getElementById("hinweis"),
     knoepfe: document.querySelectorAll("[data-ansicht]"),
-    zTonies: document.getElementById("z-tonies"),
-    zBehalten: document.getElementById("z-behalten"),
-    zVerkaufen: document.getElementById("z-verkaufen"),
-    zVerliehen: document.getElementById("z-verliehen"),
-    zaehlerFelder: document.querySelectorAll("[data-zaehler]"),
+    zaehler: document.getElementById("zaehler"),
     suche: document.getElementById("suche"),
     filter: document.querySelectorAll("[data-filter]"),
-    zuruecksetzen: document.getElementById("zuruecksetzen"),
+    filterKnopf: document.getElementById("filter-knopf"),
+    filterText: document.getElementById("filter-text"),
+    filterFenster: document.getElementById("filter-fenster"),
+    filterAnzeigen: document.getElementById("filter-anzeigen"),
+    filterZurueck: document.getElementById("filter-zuruecksetzen"),
+    aktiveFilter: document.getElementById("aktive-filter"),
+    sortierung: document.getElementById("sortierung"),
+    menueKnopf: document.getElementById("menue-knopf"),
+    menue: document.getElementById("menue"),
+    infoFenster: document.getElementById("info-fenster"),
     schloss: document.getElementById("schloss"),
     pinFenster: document.getElementById("pin-fenster"),
     pinEingabe: document.getElementById("pin-eingabe"),
@@ -41,9 +47,37 @@
 
   // Deutsche Sortierung: "Ä" bei "A", Groß-/Kleinschreibung egal, Zahlen natürlich (2 vor 10).
   const sortierer = new Intl.Collator("de", { sensitivity: "base", numeric: true });
+  const nachTitel = (a, b) => sortierer.compare(a.titel, b.titel) || sortierer.compare(a.reihe, b.reihe);
+  // Neueste zuerst; ohne Datum ("unbekannt") ans Ende
+  const nachDatum = (feld) => (a, b) => (b[feld] || "").localeCompare(a[feld] || "") || nachTitel(a, b);
+
+  // Was einem Tonie noch fehlt (für "Unvollständige zuerst"). Den Preis prüfen wir nur entsperrt.
+  function fehlendes(t) {
+    const f = [];
+    if (!t.eigenesFoto && !t.bild) f.push("Bild");
+    if (!t.link) f.push("Link");
+    if (!t.thema) f.push("Thema");
+    if (t.verkaufen > 0 && !t.zustand) f.push("Zustand");
+    if (t.verkaufen > 0 && zustand.entsperrt && t.preis === null) f.push("Preis");
+    return f;
+  }
+
+  // Sortierungen; "privat" nur entsperrt sichtbar. Tonies ohne Preis kommen immer ans Ende.
+  const SORTIERUNGEN = {
+    titel: { text: "A–Z Titel", vergleich: nachTitel },
+    reihe: { text: "A–Z Reihe", vergleich: (a, b) => sortierer.compare(a.reihe, b.reihe) || nachTitel(a, b) },
+    "titel-za": { text: "Z–A Titel", vergleich: (a, b) => nachTitel(b, a) },
+    neu: { text: "Zuletzt hinzugefügt", vergleich: nachDatum("hinzugefuegtAm") },
+    geaendert: { text: "Zuletzt geändert", vergleich: nachDatum("geaendertAm") },
+    anzahl: { text: "Anzahl (meiste zuerst)", vergleich: (a, b) => (b.behalten + b.verkaufen) - (a.behalten + a.verkaufen) || nachTitel(a, b) },
+    "preis-auf": { text: "Preis aufsteigend", privat: true,
+      vergleich: (a, b) => (a.preis === null) - (b.preis === null) || (a.preis || 0) - (b.preis || 0) || nachTitel(a, b) },
+    "preis-ab": { text: "Preis absteigend", privat: true,
+      vergleich: (a, b) => (a.preis === null) - (b.preis === null) || (b.preis || 0) - (a.preis || 0) || nachTitel(a, b) },
+    unvollstaendig: { text: "Unvollständige zuerst", vergleich: (a, b) => fehlendes(b).length - fehlendes(a).length || nachTitel(a, b) },
+  };
   function sortieren(liste) {
-    return liste.slice().sort((a, b) =>
-      sortierer.compare(a.reihe, b.reihe) || sortierer.compare(a.titel, b.titel));
+    return liste.slice().sort(SORTIERUNGEN[zustand.sortierung].vergleich);
   }
 
   function passtZurAnsicht(t, ansicht) {
@@ -66,18 +100,18 @@
     return String(t[feld] || "").split(",").map((w) => w.trim()).filter(Boolean);
   };
 
-  function passtZuFiltern(t) {
-    return FILTER.every((f) => !zustand.filter[f] || werteVon(t, f).includes(zustand.filter[f]));
-  }
-
   // Auswahllisten aus den Daten füllen, damit neue Werte im Sheet automatisch erscheinen.
   function filterFuellen() {
     el.filter.forEach((auswahl) => {
+      auswahl.length = 1;
       const feld = auswahl.dataset.filter;
       const werte = [...new Set(zustand.tonies.flatMap((t) => werteVon(t, feld)))]
         .sort(sortierer.compare);
       auswahl.insertAdjacentHTML("beforeend",
         werte.map((w) => `<option value="${esc(w)}">${esc(w)}</option>`).join(""));
+      // Ein gewählter Wert, den es nicht mehr gibt, wird zurückgesetzt.
+      auswahl.value = zustand.filter[feld];
+      if (auswahl.value !== zustand.filter[feld]) zustand.filter[feld] = "";
     });
   }
 
@@ -153,6 +187,9 @@
     }
     if (t.anzahlFehlt) marken.push(`<span class="marke fehlt">Anzahl fehlt</span>`);
     if (t.raritaet && t.raritaet !== "Normal") marken.push(`<span class="marke raritaet">★ ${esc(t.raritaet)}</span>`);
+    if (zustand.sortierung === "unvollstaendig" && fehlendes(t).length) {
+      marken.push(`<span class="marke fehlt">Fehlt: ${esc(fehlendes(t).join(", "))}</span>`);
+    }
     if (t.verliehen) {
       marken.push(zustand.entsperrt && t.verliehenAn
         ? `<span class="marke verliehen">Verliehen an ${esc(t.verliehenAn)} ${kurzDatum(t.verliehenAm)}</span>`
@@ -187,42 +224,59 @@
     </li>`;
   }
 
-  function zeichnen() {
-    const { ansicht } = zustand;
+  const FILTER_NAMEN = { reihe: "Reihe", format: "Format", inhalt: "Inhalt", thema: "Thema", zustand: "Zustand", raritaet: "Rarität" };
+
+  // Tonies nach Ansicht, Filtern und Suche; mit Suchtext die besten Treffer zuerst,
+  // außer es ist bewusst eine andere Sortierung als "A–Z Titel" gewählt.
+  function sichtbareTonies(filter) {
     const suche = zustand.suche.trim();
-    let sichtbar = zustand.tonies.filter((t) =>
-      passtZurAnsicht(t, ansicht) && passtZuFiltern(t));
-    // Mit Suchtext: nur passende Tonies, die besten zuerst.
+    let liste = zustand.tonies.filter((t) => passtZurAnsicht(t, zustand.ansicht) &&
+      FILTER.every((f) => !filter[f] || werteVon(t, f).includes(filter[f])));
     if (suche) {
       const felder = zustand.entsperrt ? SUCHFELDER_PRIVAT : SUCHFELDER;
-      sichtbar = TonieSuche.suchen(sichtbar, suche, { felder }).map((x) => x.eintrag);
+      liste = TonieSuche.suchen(liste, suche, { felder }).map((x) => x.eintrag);
+      return zustand.sortierung === "titel" ? liste : sortieren(liste);
     }
-    const eingeschraenkt = suche.length > 0 || FILTER.some((f) => zustand.filter[f]);
+    return sortieren(liste);
+  }
+
+  function zeichnen() {
+    const { ansicht } = zustand;
+    const sichtbar = sichtbareTonies(zustand.filter);
+    const aktiv = FILTER.filter((f) => zustand.filter[f]);
+    const eingeschraenkt = zustand.suche.trim().length > 0 || aktiv.length > 0;
 
     el.karten.innerHTML = sichtbar.map((t) => karte(t, ansicht)).join("");
 
-    // Zähler beziehen sich auf die gerade sichtbaren Tonies.
+    // Zähler als eine Zeile, bezogen auf die sichtbaren Tonies. In "Behalten" bzw.
+    // "Verkaufen" ist der jeweils andere Wert nicht aussagekräftig.
     const summe = (feld) => sichtbar.reduce((s, t) => s + t[feld], 0);
-    el.zTonies.textContent = sichtbar.length;
-    el.zBehalten.textContent = summe("behalten");
-    el.zVerkaufen.textContent = summe("verkaufen");
-    el.zVerliehen.textContent = sichtbar.filter((t) => t.verliehen).length;
-    // In "Behalten" bzw. "Verkaufen" ist der jeweils andere Zähler nicht aussagekräftig.
-    el.zaehlerFelder.forEach((f) => {
-      f.hidden = ansicht !== "alle" && f.dataset.zaehler !== ansicht;
-      if (f.dataset.zaehler === "verliehen" && ansicht === "alle") f.hidden = !sichtbar.some((t) => t.verliehen);
-    });
+    const verliehen = sichtbar.filter((t) => t.verliehen).length;
+    const teile = [`${sichtbar.length} ${sichtbar.length === 1 ? "Tonie" : "Tonies"}`];
+    if (ansicht === "alle" || ansicht === "behalten") teile.push(`${summe("behalten")} behalten`);
+    if (ansicht === "alle" || ansicht === "verkaufen") teile.push(`${summe("verkaufen")} zu verkaufen`);
+    if (verliehen && ansicht !== "verliehen") teile.push(`${verliehen} verliehen`);
+    el.zaehler.textContent = teile.join(" · ");
+
+    // Filter-Knopf mit Anzahl, darunter die aktiven Filter zum Einzeln-Entfernen
+    el.filterText.textContent = aktiv.length ? `Filter (${aktiv.length})` : "Filter";
+    el.filterKnopf.classList.toggle("an", aktiv.length > 0);
+    el.aktiveFilter.hidden = !aktiv.length;
+    el.aktiveFilter.innerHTML = aktiv.map((f) =>
+      `<button type="button" class="filter-chip" data-weg="${f}" aria-label="Filter ${FILTER_NAMEN[f]} entfernen">` +
+      `${FILTER_NAMEN[f]}: ${esc(zustand.filter[f])} <span aria-hidden="true">✕</span></button>`).join("") +
+      (aktiv.length > 1 ? `<button type="button" class="filter-chip leise" data-weg="alle">Alle entfernen</button>` : "");
 
     el.knoepfe.forEach((k) => k.setAttribute("aria-pressed", k.dataset.ansicht === ansicht));
     el.schloss.textContent = zustand.entsperrt ? "🔓" : "🔒";
     el.schloss.setAttribute("aria-label", zustand.entsperrt ? "Entsperrt – Zugang verwalten" : "Mit PIN entsperren");
-    el.zuruecksetzen.hidden = !eingeschraenkt;
     el.hinweis.hidden = sichtbar.length > 0;
     if (!sichtbar.length) {
       el.hinweis.textContent = eingeschraenkt
         ? "Keine Tonies gefunden. Suche oder Filter anpassen."
         : "Keine Tonies in dieser Ansicht.";
     }
+    filterAnzeigeAktualisieren();
   }
 
   // Die Ansicht steht in der Adresse (#verkaufen), damit man sie direkt verlinken kann.
@@ -239,14 +293,84 @@
   window.addEventListener("hashchange", () => { ansichtAusAdresse(); zeichnen(); });
 
   el.suche.addEventListener("input", () => { zustand.suche = el.suche.value; zeichnen(); });
+
+  // ---------- Filterfenster ----------
+  // Änderungen wirken sofort; der Knopf unten zeigt, wie viele Tonies übrig bleiben.
+  function filterAnzeigeAktualisieren() {
+    const n = sichtbareTonies(zustand.filter).length;
+    el.filterAnzeigen.textContent = n === 1 ? "1 Ergebnis anzeigen" : `${n} Ergebnisse anzeigen`;
+  }
+  el.filterKnopf.addEventListener("click", () => { filterAnzeigeAktualisieren(); el.filterFenster.showModal(); });
   el.filter.forEach((auswahl) => auswahl.addEventListener("change", () => {
     zustand.filter[auswahl.dataset.filter] = auswahl.value;
     zeichnen();
   }));
-  el.zuruecksetzen.addEventListener("click", () => {
-    zustand.suche = el.suche.value = "";
+  function filterLeeren() {
     el.filter.forEach((auswahl) => { auswahl.value = ""; zustand.filter[auswahl.dataset.filter] = ""; });
     zeichnen();
+  }
+  el.filterZurueck.addEventListener("click", filterLeeren);
+  el.aktiveFilter.addEventListener("click", (ev) => {
+    const k = ev.target.closest("[data-weg]");
+    if (!k) return;
+    if (k.dataset.weg === "alle") return filterLeeren();
+    zustand.filter[k.dataset.weg] = "";
+    document.querySelector(`[data-filter="${k.dataset.weg}"]`).value = "";
+    zeichnen();
+  });
+
+  // Fenster: ✕, Klick daneben (auf den abgedunkelten Rand) und Escape schließen.
+  document.querySelectorAll("dialog").forEach((d) => d.addEventListener("click", (ev) => {
+    if (ev.target === d || ev.target.closest("[data-schliessen]")) d.close();
+  }));
+
+  // ---------- Sortierung (wird auf diesem Gerät gemerkt) ----------
+  const SORT_SPEICHER = "tonie-sortierung";
+  function sortierungFuellen() {
+    const erlaubt = Object.keys(SORTIERUNGEN).filter((k) => !SORTIERUNGEN[k].privat || zustand.entsperrt);
+    let gewaehlt = zustand.sortierung;
+    try { gewaehlt = localStorage.getItem(SORT_SPEICHER) || gewaehlt; } catch {}
+    zustand.sortierung = erlaubt.includes(gewaehlt) ? gewaehlt : "titel";
+    el.sortierung.innerHTML = erlaubt.map((k) => `<option value="${k}">${SORTIERUNGEN[k].text}</option>`).join("");
+    el.sortierung.value = zustand.sortierung;
+  }
+  el.sortierung.addEventListener("change", () => {
+    zustand.sortierung = el.sortierung.value;
+    try { localStorage.setItem(SORT_SPEICHER, zustand.sortierung); } catch {}
+    zeichnen();
+  });
+
+  // ---------- Menü ☰ ----------
+  function menueZeigen(offen) {
+    el.menue.hidden = !offen;
+    el.menueKnopf.setAttribute("aria-expanded", offen);
+  }
+  el.menueKnopf.addEventListener("click", (ev) => { ev.stopPropagation(); menueZeigen(el.menue.hidden); });
+  document.addEventListener("click", (ev) => { if (!el.menue.hidden && !ev.target.closest("#menue")) menueZeigen(false); });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && !el.menue.hidden) { menueZeigen(false); el.menueKnopf.focus(); }
+  });
+
+  const INFOS = {
+    fototipps: ["Foto-Tipps", `<p>So erkennt die Fotoerkennung deinen Tonie am besten:</p><ul>
+      <li>nur ein Tonie im Bild</li><li>hell, ohne Blitz-Spiegelung</li><li>von vorn und nah dran</li>
+      <li>ruhiger Hintergrund</li><li>unsicher? Ein zweites Foto vom Boden oder der Verpackung</li></ul>
+      <p>Eigene Fotos für die Karte: nur den Tonie fotografieren, keine Personen – die Fotos sind per Link sichtbar.</p>`],
+    hilfe: ["Hilfe", `<ul>
+      <li><strong>Alle / Behalten / Verkaufen / Verliehen</strong> wählen, welche Tonies du siehst.</li>
+      <li><strong>Suche</strong> verzeiht Tippfehler und Umlaute, z. B. „pinokio“ oder „Bibi Blocksbeg“.</li>
+      <li><strong>Filter</strong> grenzen weiter ein; aktive Filter entfernst du mit ✕.</li>
+      <li><strong>🔒</strong> mit PIN entsperren: zeigt Preise, Kommentare und an wen ein Tonie verliehen ist.</li>
+      <li><strong>Bild antippen</strong> öffnet „Tonie verwalten“ (nur mit Passwort).</li></ul>`],
+  };
+  el.menue.addEventListener("click", (ev) => {
+    const k = ev.target.closest("[data-info]");
+    if (!k) return;
+    const [titel, text] = INFOS[k.dataset.info];
+    document.getElementById("info-titel").textContent = titel;
+    document.getElementById("info-text").innerHTML = text;
+    menueZeigen(false);
+    el.infoFenster.showModal();
   });
 
   // Letzter erfolgreich geladener Stand, falls Google mal nicht erreichbar ist.
@@ -361,8 +485,8 @@
 
   async function neuLaden() {
     const cfg = window.TONIE_CONFIG;
-    zustand.tonies = sortieren(await sammlungLaden(cfg));
-    el.filter.forEach((auswahl) => { auswahl.length = 1; });
+    zustand.tonies = await sammlungLaden(cfg);
+    sortierungFuellen();
     filterFuellen();
     zeichnen();
   }
@@ -371,7 +495,8 @@
     ansichtAusAdresse();
     const cfg = window.TONIE_CONFIG;
     try {
-      zustand.tonies = sortieren(await sammlungLaden(cfg));
+      zustand.tonies = await sammlungLaden(cfg);
+      sortierungFuellen();
       filterFuellen();
       zeichnen();
     } catch (fehler) {
