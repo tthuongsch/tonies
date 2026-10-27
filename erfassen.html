@@ -3,17 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tonie hinzufügen</title>
+  <title>Tonies</title>
   <meta name="robots" content="noindex, nofollow">
   <!-- Versionsnummer (?v=…) bei jeder neuen Fassung erhöhen: Dann lädt der Browser die Dateien neu
        statt eine alte Fassung aus dem Zwischenspeicher zu mischen. -->
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body class="erfassen">
   <header class="kopf">
-    <p class="zurueck"><a href="./">← Zur Sammlung</a></p>
+    <button type="button" class="knopf leise zurueck-knopf" data-aktion="zur-sammlung">← Zurück zur Sammlung</button>
     <div class="kopfzeile">
-      <h1 id="seitentitel">Tonie hinzufügen</h1>
+      <!-- Titel setzt erfassen.js sofort: "Tonie verwalten" (mit ?id=) oder "Tonie hinzufügen" -->
+      <h1 id="seitentitel">&nbsp;</h1>
       <button id="sperren" type="button" class="knopf leise" hidden>Sperren</button>
     </div>
   </header>
@@ -110,6 +111,20 @@
         </div>
       </div>
 
+      <!-- Nur ansehen (ohne Passwort): private Angaben mit PIN, Ändern mit Passwort -->
+      <div id="lesen-leiste" class="lesen-leiste" hidden>
+        <p id="lesen-text" class="klein"></p>
+        <div class="knopfreihe links">
+          <button type="button" class="knopf leise" id="lesen-pin-knopf" data-aktion="lesen-pin">🔒 PIN eingeben</button>
+          <button type="button" class="knopf" data-aktion="lesen-bearbeiten">Bearbeiten (Passwort)</button>
+        </div>
+        <div id="lesen-pin" hidden>
+          <label for="lesen-pin-eingabe">PIN (4 Ziffern)</label>
+          <input id="lesen-pin-eingabe" class="pin-eingabe" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="••••">
+          <p id="lesen-pin-meldung" class="meldung" role="alert" hidden></p>
+        </div>
+      </div>
+
       <form id="form-tonie" class="karte-flaeche formular" novalidate>
         <div class="feld">
           <label for="f-link">Link (beliebige Webseite)</label>
@@ -117,6 +132,8 @@
             <input id="f-link" name="link" type="url" inputmode="url" placeholder="https://tonies.com/…">
             <button type="button" class="knopf leise" data-aktion="auslesen">Daten holen</button>
           </div>
+          <!-- Zum Prüfen, ob es der richtige Tonie ist: öffnet die Seite in einem neuen Tab -->
+          <a id="link-oeffnen" class="knopf leise link-oeffnen" target="_blank" rel="noopener noreferrer" hidden>Seite öffnen ↗</a>
           <p id="auslesen-meldung" class="klein" hidden></p>
         </div>
 
@@ -176,7 +193,7 @@
         </fieldset>
 
         <div id="verkaufsfelder" class="feld zweispaltig" hidden>
-          <div>
+          <div class="privat">
             <label for="f-preis">Preis (€)</label>
             <input id="f-preis" name="preis" inputmode="decimal" placeholder="z. B. 12,50">
             <p id="neupreis" class="klein" hidden></p>
@@ -190,7 +207,7 @@
           <p id="zustand-hinweis" class="klein" data-art="hinweis" hidden>Tipp: Gib den Zustand für das Exemplar zum Verkauf an.</p>
         </div>
 
-        <fieldset class="feld verleihen">
+        <fieldset class="feld verleihen privat">
           <legend>Verliehen</legend>
           <div class="zweispaltig">
             <div><label for="f-verliehenAn">An (Name)</label><input id="f-verliehenAn" name="verliehenAn" autocomplete="off" placeholder="leer = nicht verliehen"></div>
@@ -199,7 +216,7 @@
           <button type="button" class="knopf leise" data-aktion="zurueckgegeben">Zurückgegeben</button>
         </fieldset>
 
-        <div class="feld"><label for="f-kommentar">Kommentar</label><textarea id="f-kommentar" name="kommentar" rows="2"></textarea></div>
+        <div class="feld privat"><label for="f-kommentar">Kommentar</label><textarea id="f-kommentar" name="kommentar" rows="2"></textarea></div>
         <div class="feld" id="feld-pruefen" hidden>
           <label for="f-pruefen">Prüfen (interne Notiz, nur hier sichtbar)</label>
           <textarea id="f-pruefen" name="pruefen" rows="2"></textarea>
@@ -207,7 +224,7 @@
 
         <p id="formular-meldung" class="meldung" role="alert" hidden></p>
         <div class="knopfreihe">
-          <button type="button" class="knopf leise" data-aktion="abbrechen">Abbrechen</button>
+          <button type="button" class="knopf leise" data-aktion="zur-sammlung">Abbrechen</button>
           <button type="submit" id="eintragen" class="knopf">Eintragen</button>
         </div>
         <!-- Nur in "Tonie verwalten" -->
@@ -225,14 +242,6 @@
     </section>
 
     <!-- 4. Fertig -->
-    <section id="bereich-fertig" class="karte-flaeche" hidden>
-      <p id="fertig-text" class="fertig"></p>
-      <p class="klein">Du siehst die Änderung auf der Sammlungsseite sofort. Besucher ohne PIN sehen sie nach spätestens etwa 5 Minuten.</p>
-      <div class="knopfreihe">
-        <a class="knopf leise" href="./">Zur Sammlung</a>
-        <button type="button" class="knopf" data-aktion="naechster">Nächster Tonie</button>
-      </div>
-    </section>
 
     <p id="laden" class="laden" hidden>Einen Moment …</p>
 
@@ -243,8 +252,10 @@
     <datalist id="vorschlag-thema"></datalist>
   </main>
 
-  <script src="config.js?v=5"></script>
-  <script src="suche.js?v=5"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="config.js?v=6"></script>
+  <script src="data.js?v=6"></script>
+  <script src="suche.js?v=6"></script>
   <script>
     // Testmodus nur lokal: echte Abläufe gegen nachgebautes Sheet, ohne Google.
     if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && /testmodus/.test(location.search)) {
@@ -252,6 +263,6 @@
         '<script src="tools/gs_attrappe.js"><\/script><script src="tools/erfassen_testmodus.js"><\/script>');
     }
   </script>
-  <script src="erfassen.js?v=5"></script>
+  <script src="erfassen.js?v=6"></script>
 </body>
 </html>

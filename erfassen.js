@@ -12,7 +12,28 @@
     ziel: null,        // vorhandener Eintrag beim Ergänzen
   };
 
-  const BEREICHE = ["bereich-sperre", "bereich-start", "bereich-formular", "bereich-fertig"];
+  const BEREICHE = ["bereich-sperre", "bereich-start", "bereich-formular"];
+  const VERWALTEN_ID = new URLSearchParams(location.search).get("id");
+  const TESTMODUS = /testmodus/.test(location.search) ? "?testmodus" : "";
+
+  // Titel sofort richtig, damit nicht kurz "Tonie hinzufügen" aufblitzt
+  document.title = $("seitentitel").textContent = VERWALTEN_ID ? "Tonie verwalten" : "Tonie hinzufügen";
+
+  // ---------- Zurück zur Sammlung ----------
+  // Kam man von der Übersicht, geht es mit history.back() genau dorthin zurück: kein neuer
+  // Verlaufseintrag, also keine Schleife mit der Zurück-Taste. Die Übersicht stellt Suche,
+  // Filter und Scroll-Position wieder her und zeigt die Meldung (sessionStorage).
+  function vonDerSammlung() {
+    try {
+      const r = new URL(document.referrer);
+      return r.origin === location.origin && /\/(index\.html)?$/.test(r.pathname) && history.length > 1;
+    } catch (x) { return false; }
+  }
+  function zurueckZurSammlung(text) {
+    try { if (text) sessionStorage.setItem("tonie-meldung", JSON.stringify(text)); } catch (x) {}
+    if (vonDerSammlung()) history.back();
+    else location.replace("./" + TESTMODUS);
+  }
   function zeige(bereich) {
     BEREICHE.forEach((b) => { $(b).hidden = b !== bereich; });
     $("sperren").hidden = bereich === "bereich-sperre";
@@ -51,7 +72,7 @@
         }
         antwort = await r.json();
       }
-      if (antwort.code === "schluessel" && aktion !== "entsperren") {
+      if (antwort.code === "schluessel" && aktion !== "entsperren" && !(optionen && optionen.ohneSperre)) {
         sperren("Bitte erneut entsperren (der Zugang gilt 7 Tage).");
         throw new Error("abgelaufen");
       }
@@ -408,11 +429,7 @@
     if (aktion === "abbrechen") abbrechen();
     if (aktion === "ergaenzen") ergaenzenModus(zustand.vorhanden);
     if (aktion === "auslesen") auslesen();
-    if (aktion === "naechster") {
-      // Aus "Tonie verwalten" heraus: neue, leere Seite "Tonie hinzufügen" (ohne ?id=…)
-      if (zustand.modus === "verwalten") location.href = location.pathname + (/testmodus/.test(location.search) ? "?testmodus" : "");
-      else abbrechen();
-    }
+    if (aktion === "zur-sammlung") zurueckZurSammlung();
     if (aktion === "netz-text") netzSuchenText();
     if (aktion === "foto-los") fotoLos();
     if (aktion === "selbst-suchen") selbstSuchen();
@@ -420,7 +437,7 @@
   });
 
   function abbrechen() {
-    if (zustand.modus === "verwalten") { location.href = "./"; return; }
+    if (zustand.modus === "verwalten") return zurueckZurSammlung();
     $("suchtext").value = "";
     $("treffer").innerHTML = "";
     $("nichts-gefunden").hidden = true;
@@ -449,8 +466,7 @@
   // Ansicht je Modus: neu, ergänzen (Anzahl erhöhen) oder verwalten (alle Felder eines Tonies ändern)
   function modusAnzeigen() {
     const verw = zustand.modus === "verwalten";
-    $("seitentitel").textContent = verw ? "Tonie verwalten" : "Tonie hinzufügen";
-    document.title = verw ? "Tonie verwalten" : "Tonie hinzufügen";
+    document.title = $("seitentitel").textContent = verw || VERWALTEN_ID ? "Tonie verwalten" : "Tonie hinzufügen";
     $("feld-pruefen").hidden = !verw;
     $("archiv-bereich").hidden = !verw;
     $("archiv-frage").hidden = true;
@@ -458,6 +474,7 @@
   }
 
   function formularOeffnen(felder, vorhanden) {
+    nurLesen(false);
     zustand.modus = "neu";
     zustand.ziel = null;
     zustand.eintrag = null;
@@ -639,8 +656,23 @@
     if (zustand.modus === "neu") vorhandenZeigen(a.vorhanden ? findeVorhanden(a.vorhanden) || a.vorhanden : null);
   }
 
+  // ---------- Link öffnen (nur https) ----------
+  function linkKnopf() {
+    const url = $("f-link").value.trim();
+    const ok = /^https:\/\/\S+$/i.test(url);
+    $("link-oeffnen").hidden = !ok;
+    if (ok) {
+      $("link-oeffnen").href = url;
+      let host = "";
+      try { host = new URL(url).hostname.replace(/^www\./, ""); } catch (x) {}
+      $("link-oeffnen").textContent = host ? `Auf ${host} öffnen ↗` : "Seite öffnen ↗";
+    }
+  }
+  $("f-link").addEventListener("input", linkKnopf);
+
   // ---------- Bild ----------
   function bildVorschau() {
+    linkKnopf();
     const url = $("f-bild").value.trim();
     const img = $("bild-vorschau");
     img.hidden = !/^https:\/\//i.test(url);
@@ -698,6 +730,7 @@
 
   $("form-tonie").addEventListener("submit", async (ev) => {
     ev.preventDefault();
+    if (zustand.modus === "lesen") return;
     const felder = formularWerte();
     if (!felder.titel || !felder.reihe) {
       meldung("formular-meldung", "Bitte Titel und Reihe ausfüllen.");
@@ -723,11 +756,9 @@
       return window.scrollTo(0, 0);
     }
     if (!a.ok) return meldung("formular-meldung", a.fehler);
-    $("fertig-text").innerHTML = a.ergebnis === "ergaenzt"
-      ? `<strong>${esc(a.titel)}</strong> ist aktualisiert: jetzt ${anzahlText(a)}.`
-      : `<strong>${esc(a.titel)}</strong> ist eingetragen${a.behalten || a.verkaufen ? ": " + anzahlText(a) : ""}.`;
-    zeige("bereich-fertig");
-    listeLaden();
+    zurueckZurSammlung(a.ergebnis === "ergaenzt"
+      ? `„${a.titel}“ aktualisiert: ${anzahlText(a)}`
+      : `„${a.titel}“ eingetragen`);
   });
 
   // ---------- Tonie verwalten: speichern, Konflikt, archivieren ----------
@@ -740,17 +771,14 @@
       return window.scrollTo(0, 0);
     }
     if (!a.ok) return meldung("formular-meldung", a.fehler);
-    zustand.eintrag = a.eintrag;
-    $("fertig-text").innerHTML = `<strong>${esc(a.eintrag.titel)}</strong> ist gespeichert.`;
-    zeige("bereich-fertig");
+    zurueckZurSammlung(`„${a.eintrag.titel}“ gespeichert`);
   }
 
   async function archivieren() {
     const e = zustand.eintrag;
     const a = await anfrage("archivieren", { id: e.id });
     if (!a.ok) return meldung("formular-meldung", a.fehler);
-    $("fertig-text").innerHTML = `<strong>${esc(a.titel)}</strong> ist archiviert und erscheint nicht mehr auf der Seite.`;
-    zeige("bereich-fertig");
+    zurueckZurSammlung(`„${a.titel}“ archiviert`);
   }
 
   document.addEventListener("click", (ev) => {
@@ -765,6 +793,109 @@
     if (aktion === "archivieren-ja") archivieren();
     if (aktion === "eigen-weg") { zustand.eigen.neu = null; zustand.eigen.weg = !!zustand.eigen.bisher; eigenAnzeigen(); }
     if (aktion === "eigen-erkennung" && zustand.fotos[0]) fetch(zustand.fotos[0]).then((r) => r.blob()).then(eigenSetzen);
+  });
+
+  // ---------- Tonie verwalten ohne Passwort: nur ansehen ----------
+  // Ohne Schlüssel: nur öffentliche Angaben. Mit PIN (wie auf der Übersicht): auch Preis,
+  // Kommentar und an wen verliehen – aber nichts änderbar. Ändern braucht das Passwort;
+  // das prüft das Apps Script, die Sperre hier ist nur die Oberfläche.
+  const PIN_SPEICHER = "tonie-pin";
+  function pinZugang() {
+    try { const z = JSON.parse(localStorage.getItem(PIN_SPEICHER)); return z && z.schluessel && z.bis > Date.now() ? z : null; }
+    catch (x) { return null; }
+  }
+  const PRIVAT = ["preis", "kommentar", "verliehenAn", "verliehenAm"];
+
+  function nurLesen(an) {
+    $("form-tonie").querySelectorAll("input, select, textarea, button:not([data-aktion='zur-sammlung'])")
+      .forEach((e) => { e.disabled = an; });
+    $("form-tonie").classList.toggle("nur-lesen", an);
+    $("lesen-leiste").hidden = !an;
+    if (!an) {
+      $("eintragen").hidden = false;
+      document.querySelector(".eigenes-foto").hidden = false;
+      PRIVAT.forEach((f) => { $("f-" + f).placeholder = { preis: "z. B. 12,50", verliehenAn: "leer = nicht verliehen" }[f] || ""; });
+    }
+  }
+
+  async function lesenStart() {
+    let t = null;
+    let privat = false;
+    try {
+      const a = JSON.parse(sessionStorage.getItem("tonie-auswahl"));
+      if (a && a.id === VERWALTEN_ID) t = a;
+    } catch (x) {}
+    const pin = pinZugang();
+    if (t) lesenZeigen(t, false); // sofort anzeigen, private Angaben folgen
+    if (pin) {
+      const a = await anfrage("sammlung", { schluessel: pin.schluessel }, { leise: !!t, ohneSperre: true });
+      const mitPrivat = a.ok && a.tonies.find((x) => x.id === VERWALTEN_ID);
+      if (mitPrivat) { t = mitPrivat; privat = true; }
+      else if (a.code === "schluessel") { try { localStorage.removeItem(PIN_SPEICHER); } catch (x) {} }
+    }
+    // Seite direkt geöffnet: den Tonie aus der öffentlichen Liste holen
+    if (!t && window.ToniesDaten && cfg.csvUrl) {
+      try { t = (await ToniesDaten.laden(cfg.csvUrl)).find((x) => x.id === VERWALTEN_ID) || null; } catch (x) {}
+    }
+    if (!t) {
+      sperren("Diesen Tonie gibt es nicht (mehr). Zum Hinzufügen bitte mit dem Passwort entsperren.");
+      return;
+    }
+    lesenZeigen(t, privat);
+  }
+
+  function lesenZeigen(t, privat) {
+    const sicher = Object.assign({}, t);
+    if (!privat) PRIVAT.forEach((f) => { sicher[f] = ""; });
+    verwaltenOeffnen(sicher);
+    zustand.modus = "lesen";
+    $("eintragen").hidden = true;
+    $("archiv-bereich").hidden = true;
+    $("feld-pruefen").hidden = true;
+    $("sperren").hidden = true;
+    document.querySelector(".eigenes-foto").hidden = true;
+    nurLesen(true);
+    if (!privat) {
+      $("f-preis").placeholder = "🔒 mit PIN sichtbar";
+      $("f-kommentar").placeholder = "🔒 mit PIN sichtbar";
+      $("f-verliehenAn").placeholder = t.verliehen === true || t.verliehen === "ja" ? "🔒 verliehen – an wen: mit PIN" : "nicht verliehen";
+    } else {
+      ["preis", "kommentar"].forEach((f) => { $("f-" + f).placeholder = "–"; });
+      $("f-verliehenAn").placeholder = "nicht verliehen";
+    }
+    $("lesen-pin-knopf").hidden = privat;
+    $("lesen-pin").hidden = true;
+    $("lesen-text").textContent = privat
+      ? "Nur ansehen. Zum Ändern mit dem Passwort entsperren."
+      : "Nur ansehen. Preis, Kommentar und an wen verliehen siehst du mit PIN; ändern geht mit dem Passwort.";
+  }
+
+  document.addEventListener("click", (ev) => {
+    const k = ev.target.closest("[data-aktion]");
+    if (!k) return;
+    if (k.dataset.aktion === "lesen-pin") {
+      $("lesen-pin").hidden = false;
+      $("lesen-pin-eingabe").value = "";
+      $("lesen-pin-eingabe").focus();
+    }
+    if (k.dataset.aktion === "lesen-bearbeiten") sperren("Zum Bearbeiten bitte mit dem Passwort entsperren.");
+  });
+
+  $("lesen-pin-eingabe").addEventListener("input", async () => {
+    const feld = $("lesen-pin-eingabe");
+    feld.value = feld.value.replace(/\D/g, "").slice(0, 4);
+    if (feld.value.length < 4) return;
+    feld.disabled = true;
+    const a = await anfrage("pin", { pin: feld.value }, { ohneSperre: true });
+    feld.disabled = false;
+    if (!a.ok) {
+      meldung("lesen-pin-meldung", a.code === "falsch" ? "PIN falsch." : a.fehler);
+      feld.value = "";
+      return feld.focus();
+    }
+    try { localStorage.setItem(PIN_SPEICHER, JSON.stringify({ schluessel: a.schluessel, bis: a.bis })); } catch (x) {}
+    meldung("lesen-pin-meldung", "");
+    lesenStart();
   });
 
   // ---------- Hilfen ----------
@@ -795,5 +926,7 @@
 
   // ---------- Beginn ----------
   zustand.zugang = gespeicherterZugang();
-  if (zustand.zugang) start(); else sperren("");
+  if (zustand.zugang) start();
+  else if (VERWALTEN_ID) lesenStart();
+  else sperren("");
 })();

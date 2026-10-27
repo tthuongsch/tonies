@@ -2,6 +2,7 @@
 (function () {
   const ANSICHTEN = ["alle", "behalten", "verkaufen", "verliehen"];
   const FILTER = ["reihe", "format", "inhalt", "thema", "zustand", "raritaet"];
+  const TESTMODUS = /testmodus/.test(location.search) ? "&testmodus" : ""; // nur lokal
 
   const zustand = {
     tonies: [],
@@ -66,7 +67,6 @@
   const SORTIERUNGEN = {
     titel: { text: "A–Z Titel", vergleich: nachTitel },
     reihe: { text: "A–Z Reihe", vergleich: (a, b) => sortierer.compare(a.reihe, b.reihe) || nachTitel(a, b) },
-    "titel-za": { text: "Z–A Titel", vergleich: (a, b) => nachTitel(b, a) },
     neu: { text: "Zuletzt hinzugefügt", vergleich: nachDatum("hinzugefuegtAm") },
     geaendert: { text: "Zuletzt geändert", vergleich: nachDatum("geaendertAm") },
     anzahl: { text: "Anzahl (meiste zuerst)", vergleich: (a, b) => (b.behalten + b.verkaufen) - (a.behalten + a.verkaufen) || nachTitel(a, b) },
@@ -179,8 +179,14 @@
     const oben = [titelIstReihe ? "" : t.reihe, t.kollektion].filter(Boolean).join(" · ");
 
     const marken = [];
+    // Verkaufsgruppe: Preis und Zustand gehören zum Exemplar im Verkauf, deshalb direkt dahinter.
     if (ansicht !== "behalten" && t.verkaufen > 0) {
-      marken.push(`<span class="marke verkaufen">${t.verkaufen}× zu verkaufen</span>`);
+      const info = [];
+      if (!zustand.entsperrt) info.push(gesperrt("Preis")); // der Preis ist privat
+      else if (t.preis !== null) info.push(`<strong>${preisText(t.preis)}</strong>`);
+      if (t.zustand) info.push(esc(t.zustand));
+      marken.push(`<span class="verkauf-gruppe"><span class="marke verkaufen">${t.verkaufen}× verkaufen</span>` +
+        `${info.length ? `<span class="verkauf-info">${info.join(" · ")}</span>` : ""}</span>`);
     }
     if (ansicht !== "verkaufen" && t.behalten > 0) {
       marken.push(`<span class="marke behalten">${t.behalten}× behalten</span>`);
@@ -198,25 +204,17 @@
 
     const details = [t.inhalt, t.thema].filter(Boolean).map(esc).join(" · ");
 
-    const verkauf = [];
-    if (ansicht !== "behalten" && t.verkaufen > 0) {
-      // Der Preis ist privat: ohne PIN nur ein Schloss.
-      if (!zustand.entsperrt) verkauf.push(gesperrt("Preis"));
-      else if (t.preis !== null) verkauf.push(`<strong>${preisText(t.preis)}</strong>`);
-      if (t.zustand) verkauf.push(esc(t.zustand));
-    }
-
+    // Der Link liegt über der ganzen Karte; "Auf tonies.com ansehen" und 🔒 liegen darüber.
     return `<li class="karte">
+      ${t.id ? `<a class="karte-link" href="erfassen.html?id=${encodeURIComponent(t.id)}${TESTMODUS}" data-id="${esc(t.id)}" aria-label="${esc(t.titel)} verwalten"></a>` : ""}
       <div class="bild">
         ${bild(t)}
-        ${t.id ? `<a class="bild-link" href="erfassen.html?id=${encodeURIComponent(t.id)}" aria-label="${esc(t.titel)} verwalten"></a>` : ""}
         ${t.format ? `<span class="format">${esc(t.format)}</span>` : ""}
       </div>
       <div class="text">
         ${oben ? `<p class="reihe">${markiert(oben)}</p>` : ""}
         <h2 class="titel">${markiert(t.titel)}</h2>
         <div class="marken">${marken.join("")}</div>
-        ${verkauf.length ? `<p class="verkauf">${verkauf.join(" · ")}</p>` : ""}
         ${details ? `<p class="details">${details}</p>` : ""}
         ${zustand.entsperrt && t.kommentar ? `<p class="kommentar">${markiert(t.kommentar)}</p>` : ""}
         ${t.link ? quelleKnopf(t.link) : ""}
@@ -254,7 +252,7 @@
     const verliehen = sichtbar.filter((t) => t.verliehen).length;
     const teile = [`${sichtbar.length} ${sichtbar.length === 1 ? "Tonie" : "Tonies"}`];
     if (ansicht === "alle" || ansicht === "behalten") teile.push(`${summe("behalten")} behalten`);
-    if (ansicht === "alle" || ansicht === "verkaufen") teile.push(`${summe("verkaufen")} zu verkaufen`);
+    if (ansicht === "alle" || ansicht === "verkaufen") teile.push(`${summe("verkaufen")} verkaufen`);
     if (verliehen && ansicht !== "verliehen") teile.push(`${verliehen} verliehen`);
     el.zaehler.textContent = teile.join(" · ");
 
@@ -483,6 +481,67 @@
     neuLaden();
   });
 
+  // ---------- Zustand der Übersicht merken (für die Rückkehr von "Tonie verwalten") ----------
+  // sessionStorage gilt nur in diesem Tab. Die Verwalten-Seite springt mit history.back() zurück,
+  // damit kein neuer Verlaufseintrag entsteht; hier wird dann alles wiederhergestellt.
+  const UEBERSICHT_SPEICHER = "tonie-uebersicht";
+  const AUSWAHL_SPEICHER = "tonie-auswahl";
+  const MELDUNG_SPEICHER = "tonie-meldung";
+  const sitzung = {
+    lesen(name) { try { return JSON.parse(sessionStorage.getItem(name)); } catch { return null; } },
+    schreiben(name, wert) { try { sessionStorage.setItem(name, JSON.stringify(wert)); } catch {} },
+    weg(name) { try { sessionStorage.removeItem(name); } catch {} },
+  };
+  function uebersichtMerken() {
+    sitzung.schreiben(UEBERSICHT_SPEICHER, { ansicht: zustand.ansicht, suche: zustand.suche,
+      filter: zustand.filter, scroll: window.scrollY });
+  }
+  function uebersichtHolen() {
+    const g = sitzung.lesen(UEBERSICHT_SPEICHER);
+    if (!g) return null;
+    // Steht eine Ansicht in der Adresse (#verkaufen), gilt diese; sonst die gemerkte.
+    if (!location.hash && ANSICHTEN.includes(g.ansicht) && g.ansicht !== "alle") {
+      zustand.ansicht = g.ansicht;
+      history.replaceState(null, "", "#" + g.ansicht);
+    }
+    zustand.suche = el.suche.value = String(g.suche || "");
+    FILTER.forEach((f) => { zustand.filter[f] = (g.filter && g.filter[f]) || ""; });
+    return g;
+  }
+  window.addEventListener("pagehide", uebersichtMerken);
+  // Klick auf eine Karte: Zustand merken und die Angaben des Tonies mitgeben,
+  // damit "Tonie verwalten" sofort etwas zeigt.
+  el.karten.addEventListener("click", (ev) => {
+    const link = ev.target.closest(".karte-link");
+    if (!link) return;
+    uebersichtMerken();
+    const t = zustand.tonies.find((x) => x.id === link.dataset.id);
+    if (t) sitzung.schreiben(AUSWAHL_SPEICHER, t);
+  });
+
+  // Kurze Bestätigung wie "„Pinocchio“ gespeichert"
+  let toastTimer;
+  function meldungZeigen() {
+    const text = sitzung.lesen(MELDUNG_SPEICHER);
+    sitzung.weg(MELDUNG_SPEICHER);
+    if (!text) return;
+    const t = document.getElementById("toast");
+    t.textContent = text;
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.hidden = true; }, 3500);
+  }
+
+  // Zurück aus dem Zwischenspeicher des Browsers (Zurück-Taste, history.back()):
+  // Zustand und Scroll-Position sind noch da, die Daten aber frisch holen.
+  window.addEventListener("pageshow", async (ev) => {
+    if (!ev.persisted) return;
+    const scroll = window.scrollY;
+    await neuLaden();
+    window.scrollTo(0, scroll);
+    meldungZeigen();
+  });
+
   async function neuLaden() {
     const cfg = window.TONIE_CONFIG;
     zustand.tonies = await sammlungLaden(cfg);
@@ -493,12 +552,15 @@
 
   async function start() {
     ansichtAusAdresse();
+    const gemerkt = uebersichtHolen();
     const cfg = window.TONIE_CONFIG;
     try {
       zustand.tonies = await sammlungLaden(cfg);
       sortierungFuellen();
       filterFuellen();
       zeichnen();
+      if (gemerkt && gemerkt.scroll) window.scrollTo(0, gemerkt.scroll);
+      meldungZeigen();
     } catch (fehler) {
       console.error(fehler);
       el.hinweis.textContent = "Die Sammlung konnte gerade nicht geladen werden. Bitte später neu laden.";
