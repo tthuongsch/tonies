@@ -141,7 +141,13 @@ body {
 @media (max-width: 699px) {
   .ansichten { display: flex; width: 100%; padding: 3px; gap: 2px; }
   .ansichten button { flex: 1 1 auto; padding: 8px 6px; font-size: 0.95rem; }
+  /* Filter nur so breit wie nötig, die Sortierung bekommt den Rest der Zeile */
+  #filter-knopf { flex: none; padding: 0 12px; }
+  .sortierung { flex: 1; min-width: 0; }
+  .sortierung svg { left: 12px; }
+  .sortierung select { font-size: 0.92rem; padding: 0 8px 0 34px; }
 }
+.sortierung select { text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
 @media (min-width: 700px) {
   .leiste-knoepfe { flex: 0 0 auto; margin-left: auto; }
   .pille { flex: none; }

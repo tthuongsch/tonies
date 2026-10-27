@@ -67,14 +67,14 @@
   const SORTIERUNGEN = {
     titel: { text: "A–Z Titel", vergleich: nachTitel },
     reihe: { text: "A–Z Reihe", vergleich: (a, b) => sortierer.compare(a.reihe, b.reihe) || nachTitel(a, b) },
-    neu: { text: "Zuletzt hinzugefügt", vergleich: nachDatum("hinzugefuegtAm") },
+    neu: { text: "Neueste zuerst", vergleich: nachDatum("hinzugefuegtAm") },
     geaendert: { text: "Zuletzt geändert", vergleich: nachDatum("geaendertAm") },
-    anzahl: { text: "Anzahl (meiste zuerst)", vergleich: (a, b) => (b.behalten + b.verkaufen) - (a.behalten + a.verkaufen) || nachTitel(a, b) },
-    "preis-auf": { text: "Preis aufsteigend", privat: true,
+    anzahl: { text: "Meiste zuerst", vergleich: (a, b) => (b.behalten + b.verkaufen) - (a.behalten + a.verkaufen) || nachTitel(a, b) },
+    "preis-auf": { text: "Preis ↑", privat: true,
       vergleich: (a, b) => (a.preis === null) - (b.preis === null) || (a.preis || 0) - (b.preis || 0) || nachTitel(a, b) },
-    "preis-ab": { text: "Preis absteigend", privat: true,
+    "preis-ab": { text: "Preis ↓", privat: true,
       vergleich: (a, b) => (a.preis === null) - (b.preis === null) || (b.preis || 0) - (a.preis || 0) || nachTitel(a, b) },
-    unvollstaendig: { text: "Unvollständige zuerst", vergleich: (a, b) => fehlendes(b).length - fehlendes(a).length || nachTitel(a, b) },
+    unvollstaendig: { text: "Unvollständige", vergleich: (a, b) => fehlendes(b).length - fehlendes(a).length || nachTitel(a, b) },
   };
   function sortieren(liste) {
     return liste.slice().sort(SORTIERUNGEN[zustand.sortierung].vergleich);
