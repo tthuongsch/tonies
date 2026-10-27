@@ -22,6 +22,8 @@ function onOpen() {
     .addItem("Katalog von tonies.com aktualisieren", "katalogAktualisieren")
     .addItem("Datenmodell einrichten (einmalig)", "datenmodellEinrichten")
     .addItem("Tab „Öffentlich“ aktualisieren", "oeffentlichAktualisieren")
+    .addItem("Version-Vorschläge erstellen", "versionVorschlaegeErstellen")
+    .addItem("Version-Vorschläge übernehmen (nur angehakte)", "versionVorschlaegeUebernehmen")
     .addItem("Sicherungskopie jetzt anlegen", "sicherungAnlegen")
     .addItem("Automatik einschalten", "automatikEinschalten")
     .addToUi();

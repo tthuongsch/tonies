@@ -397,9 +397,12 @@ const FELDER = {
   "ID": "id", "Rarität": "raritaet", "Verliehen an": "verliehenAn", "Verliehen am": "verliehenAm",
   "Hinzugefügt am": "hinzugefuegtAm", "Geändert am": "geaendertAm", "Eigenes Foto": "eigenesFoto",
   "Archiviert am": "archiviertAm", "Prüfen": "pruefen",
+  "Version": "version", "Richtwert": "richtwert", "Wert-Quelle": "wertQuelle", "Wert-Stand": "wertStand",
 };
-// Nur diese Felder dürfen ohne PIN die Website erreichen (Tab "Öffentlich", CSV).
-const PRIVATE_FELDER = ["verliehenAn", "verliehenAm", "kommentar", "preis"];
+// Diese Felder erreichen die Website nur mit PIN oder Passwort (nie Tab "Öffentlich", nie CSV).
+const PRIVATE_FELDER = ["verliehenAn", "verliehenAm", "kommentar", "preis", "richtwert", "wertStand"];
+// Version eines Tonies; "Neuauflage 2024" usw. sind ebenfalls erlaubt (Auswahl im Sheet warnt nur).
+const VERSIONEN = ["Original", "Neuauflage", "Relaunch", "unbekannt"];
 
 function doGet() {
   return alsJson({ ok: true, hinweis: "Die Tonie-Erfassung ist bereit." });
@@ -543,7 +546,9 @@ function eigeneListe() {
     t.reihe = String(t.reihe || "").trim();
     if (!t.titel && !t.reihe) continue;
     ["kollektion", "format", "inhalt", "thema", "link", "bild", "zustand", "kommentar", "id", "raritaet",
-      "verliehenAn", "eigenesFoto", "pruefen"].forEach((f) => { t[f] = String(t[f] === undefined ? "" : t[f]).trim(); });
+      "verliehenAn", "eigenesFoto", "pruefen", "version", "richtwert", "wertQuelle"]
+      .forEach((f) => { t[f] = String(t[f] === undefined ? "" : t[f]).trim(); });
+    t.wertStand = datumText(t.wertStand, "yyyy-MM-dd");
     t.behalten = anzahlWert(t.behalten) || 0;
     t.verkaufen = anzahlWert(t.verkaufen) || 0;
     t.preis = preisWert(t.preis);
@@ -564,6 +569,7 @@ function fuerWebsite(t) {
     preis: t.preis, zustand: t.zustand, raritaet: t.raritaet, kommentar: t.kommentar,
     verliehenAn: t.verliehenAn, verliehenAm: t.verliehenAm, verliehen: t.verliehenAn ? "ja" : "",
     hinzugefuegtAm: t.hinzugefuegtAm, geaendertAm: t.geaendertAm,
+    version: t.version, richtwert: t.richtwert, wertQuelle: t.wertQuelle, wertStand: t.wertStand,
   };
 }
 
@@ -590,12 +596,31 @@ function linkSchluessel(url) {
   return String(url || "").trim().toLowerCase().replace(/[?#].*$/, "").replace(/\/+$/, "");
 }
 
-/** Gleicher Tonie = gleicher Link, oder Titel und Reihe stimmen überein. */
-function findeVorhanden(felder, liste) {
+/**
+ * Gleicher Tonie = gleicher Link, oder Titel und Reihe stimmen überein und die Version
+ * widerspricht sich nicht ("alte Version" und "Neuauflage" sind zwei verschiedene Tonies).
+ * nurLink: bei "Neuer Eintrag für andere Version" zählt nur der gleiche Link.
+ */
+function findeVorhanden(felder, liste, nurLink) {
   const link = linkSchluessel(felder.link);
   const name = vereinfachen(felder.titel) + "|" + vereinfachen(felder.reihe);
   return liste.find((t) => (link && linkSchluessel(t.link) === link) ||
-    (felder.titel && vereinfachen(t.titel) + "|" + vereinfachen(t.reihe) === name)) || null;
+    (!nurLink && felder.titel && vereinfachen(t.titel) + "|" + vereinfachen(t.reihe) === name &&
+      versionenPassen(t.version, felder.version))) || null;
+}
+
+/** Leer oder "unbekannt" passt zu allem; sonst zählt die Art (Original/Neuauflage/Relaunch) samt Jahr. */
+function versionenPassen(a, b) {
+  const v = (x) => vereinfachen(x).replace(/\s+/g, " ").trim();
+  const x = v(a), y = v(b);
+  return !x || !y || x === "unbekannt" || y === "unbekannt" || x === y;
+}
+
+/** Version aus der tonies.com-Adresse: nur "neuauflage(-JJJJ)" und "relaunch(-JJJJ)" zählen. */
+function versionAusLink(url) {
+  const m = String(url || "").toLowerCase().match(/(neuauflage|relaunch)(?:-(\d{4}))?(?=[\/\-?#]|$)/);
+  if (!m) return "";
+  return (m[1] === "relaunch" ? "Relaunch" : "Neuauflage") + (m[2] ? " " + m[2] : "");
 }
 
 function vorhandenInfo(t) {
@@ -641,6 +666,7 @@ function auslesen(url) {
   if (!felder.titel && !felder.bild) {
     return { ok: false, fehler: "Auf der Seite wurden weder Titel noch Bild gefunden. Bitte von Hand ausfüllen." };
   }
+  if (!felder.version) felder.version = versionAusLink(url);
   return { ok: true, felder: felder, vorhanden: vorhandenInfo(findeVorhanden(felder, eigeneListe())) };
 }
 
@@ -680,7 +706,7 @@ function eintragen(anfrage) {
       return { ok: true, ergebnis: "ergaenzt", titel: f.titel, behalten: f.behalten, verkaufen: f.verkaufen };
     }
 
-    const vorhanden = findeVorhanden(f, liste);
+    const vorhanden = findeVorhanden(f, liste, !!anfrage.andereVersion);
     if (vorhanden) {
       return { ok: false, code: "vorhanden", fehler: "Dieser Tonie steht schon in deiner Liste.", vorhanden: vorhandenInfo(vorhanden) };
     }
@@ -764,7 +790,38 @@ function felderPruefen(roh) {
     }
   }
   if (roh.pruefen !== undefined) w.pruefen = text(roh.pruefen, 1000);
+  // Version, Richtwert, Wert-Quelle, Wert-Stand: nur schreiben, wenn mitgeschickt
+  if (roh.version !== undefined) w.version = text(roh.version, 40);
+  else if (w.link) w.version = versionAusLink(w.link) || undefined;
+  if (w.version === undefined) delete w.version;
+  if (roh.richtwert !== undefined) {
+    w.richtwert = richtwertText(roh.richtwert);
+    if (w.richtwert === null) return { fehler: "Richtwert bitte als Zahl oder Spanne angeben, z. B. 25 oder 20–30." };
+  }
+  if (roh.wertQuelle !== undefined) {
+    w.wertQuelle = String(roh.wertQuelle || "").trim();
+    if (w.wertQuelle && !/^https:\/\/\S+$/i.test(w.wertQuelle)) return { fehler: "Die Wert-Quelle muss mit https:// beginnen." };
+  }
+  if (roh.wertStand !== undefined) {
+    const d = String(roh.wertStand || "").trim();
+    const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (d && !m) return { fehler: "„Wert-Stand“ bitte als Datum angeben." };
+    w.wertStand = m ? new Date(+m[1], +m[2] - 1, +m[3]) : "";
+  }
   return { werte: w };
+}
+
+// "25", "25 €", "20-30", "20 – 30 €", "12,50" → "25", "20–30", "12,5"; leer → ""; sonst null
+function richtwertText(v) {
+  const s = String(v === undefined || v === null ? "" : v).replace(/€|eur(o)?/gi, "").trim();
+  if (!s) return "";
+  const zahl = (x) => { const n = Number(String(x).trim().replace(",", ".")); return isFinite(n) && n >= 0 && n < 100000 ? n : null; };
+  const teile = s.split(/\s*[-–—]\s*|\s+bis\s+/i);
+  if (teile.length > 2) return null;
+  const z = teile.map(zahl);
+  if (z.some((n) => n === null)) return null;
+  const text = (n) => String(n).replace(".", ",");
+  return z.length === 2 ? (z[0] === z[1] ? text(z[0]) : text(Math.min(z[0], z[1])) + "–" + text(Math.max(z[0], z[1]))) : text(z[0]);
 }
 
 // Ein "=" (oder +, -, @) am Anfang würde das Sheet als Formel lesen.
@@ -1362,12 +1419,12 @@ function fotoVorsichten(anfrage) {
  * ------------------------------------------------------------------ */
 
 const NEUE_SPALTEN = ["ID", "Rarität", "Verliehen an", "Verliehen am", "Hinzugefügt am", "Geändert am",
-  "Eigenes Foto", "Archiviert am"];
+  "Eigenes Foto", "Archiviert am", "Version", "Richtwert", "Wert-Quelle", "Wert-Stand"];
 const OEFFENTLICH_BLATT = "Öffentlich";
 // Genau diese Spalten stehen im öffentlichen Tab (und damit in der CSV). Private Felder fehlen hier bewusst.
 const OEFFENTLICHE_SPALTEN = ["ID", "Titel", "Reihe", "Kollektion", "Format", "Inhalt", "Thema", "Anzahl behalten",
   "Anzahl verkaufen", "Gesamt", "Link", "Bild-URL", "Eigenes Foto", "Zustand", "Rarität", "Verliehen",
-  "Hinzugefügt am", "Geändert am"];
+  "Hinzugefügt am", "Geändert am", "Version", "Wert-Quelle"];
 
 /** Neue Tonie-Nummer: T0001, T0002 … (Zähler in den Skripteigenschaften, nie doppelt). */
 function naechsteId() {
@@ -1428,7 +1485,8 @@ function listenEinrichten(blatt, kopf) {
   const sheet = SpreadsheetApp.getActive();
   const listen = sheet.getSheetByName("Listen") || sheet.insertSheet("Listen");
   const lKopf = listen.getLastColumn() ? listen.getRange(1, 1, 1, listen.getLastColumn()).getValues()[0].map((k) => String(k).trim()) : [];
-  [["Zustand", ZUSTAENDE], ["Rarität", RARITAETEN]].forEach(([name, werte]) => {
+  // Version: Auswahl warnt nur, damit auch "Neuauflage 2024" möglich ist.
+  [["Zustand", ZUSTAENDE, false], ["Rarität", RARITAETEN, false], ["Version", VERSIONEN, true]].forEach(([name, werte, frei]) => {
     let s = lKopf.indexOf(name);
     if (s < 0) { s = lKopf.length; lKopf.push(name); }
     // Alte Werte der Spalte leeren (z. B. "Wie neu"), dann die neuen eintragen.
@@ -1439,7 +1497,7 @@ function listenEinrichten(blatt, kopf) {
     const sTonies = kopf.indexOf(name);
     if (sTonies >= 0) {
       const regel = SpreadsheetApp.newDataValidation()
-        .requireValueInRange(listen.getRange(2, s + 1, werte.length, 1), true).setAllowInvalid(false).build();
+        .requireValueInRange(listen.getRange(2, s + 1, werte.length, 1), true).setAllowInvalid(frei).build();
       blatt.getRange(2, sTonies + 1, Math.max(blatt.getMaxRows() - 1, 1), 1).setDataValidation(regel);
     }
   });
@@ -1569,7 +1627,8 @@ function archivieren(anfrage) {
 
 /** Auswahllisten aus dem Tab "Listen" (eine Spalte je Liste); fehlt etwas, gelten die festen Werte. */
 function listenLesen() {
-  const ergebnis = { "Format": [], "Inhalt": [], "Thema": [], "Zustand": ZUSTAENDE.slice(), "Rarität": RARITAETEN.slice() };
+  const ergebnis = { "Format": [], "Inhalt": [], "Thema": [], "Zustand": ZUSTAENDE.slice(), "Rarität": RARITAETEN.slice(),
+    "Version": VERSIONEN.slice() };
   const listen = SpreadsheetApp.getActive().getSheetByName("Listen");
   if (listen && listen.getLastColumn()) {
     const werte = listen.getDataRange().getValues();
@@ -1675,4 +1734,59 @@ function altesFotoWegwerfen(url) {
   } catch (x) {
     // Datei schon weg oder kein Zugriff: dann gibt es nichts aufzuräumen.
   }
+}
+
+/*
+ * Teil 10: Version für vorhandene Tonies – erst vorschlagen, dann nur Angehaktes übernehmen
+ */
+const VORSCHLAG_BLATT = "Version-Vorschläge";
+
+/** Schreibt Vorschläge (aus Link oder Kommentar) in einen eigenen Tab; im Tab "Tonies" ändert sich nichts. */
+function versionVorschlaegeErstellen() {
+  const zeilen = [["ID", "Titel", "Reihe", "Vorschlag", "Grund", "Übernehmen"]];
+  eigeneListe().forEach((t) => {
+    if (t.version) return;
+    let vorschlag = versionAusLink(t.link), grund = vorschlag ? "Link: " + t.link : "";
+    if (!vorschlag && /alte\s*version|original/i.test(t.kommentar)) { vorschlag = "Original"; grund = "Kommentar: " + t.kommentar; }
+    else if (!vorschlag && /neuauflage|relaunch/i.test(t.kommentar)) {
+      vorschlag = /relaunch/i.test(t.kommentar) ? "Relaunch" : "Neuauflage"; grund = "Kommentar: " + t.kommentar;
+    }
+    if (vorschlag) zeilen.push([t.id, t.titel, t.reihe, vorschlag, grund, false]);
+  });
+  const sheet = SpreadsheetApp.getActive();
+  const ziel = sheet.getSheetByName(VORSCHLAG_BLATT) || sheet.insertSheet(VORSCHLAG_BLATT);
+  ziel.clear();
+  ziel.getRange(1, 1, zeilen.length, 6).setValues(zeilen);
+  ziel.getRange(1, 1, 1, 6).setFontWeight("bold");
+  if (zeilen.length > 1) ziel.getRange(2, 6, zeilen.length - 1, 1).insertCheckboxes();
+  sheet.toast(`${zeilen.length - 1} Vorschläge im Tab „${VORSCHLAG_BLATT}“. Häkchen setzen, dann „übernehmen“.`, "Version");
+  return zeilen.length - 1;
+}
+
+/** Übernimmt nur angehakte Vorschläge (Spalte "Vorschlag" darf vorher geändert werden). */
+function versionVorschlaegeUebernehmen() {
+  const ziel = SpreadsheetApp.getActive().getSheetByName(VORSCHLAG_BLATT);
+  if (!ziel) throw new Error("Bitte zuerst „Version-Vorschläge erstellen“.");
+  const vorschlaege = ziel.getDataRange().getValues().slice(1).filter((z) => z[5] === true);
+  const sperre = LockService.getScriptLock();
+  sperre.waitLock(20000);
+  let n = 0;
+  try {
+    const blatt = toniesBlatt();
+    const kopf = blatt.getRange(1, 1, 1, blatt.getLastColumn()).getValues()[0].map((k) => String(k).trim());
+    if (kopf.indexOf("Version") < 0) throw new Error("Bitte zuerst „Datenmodell einrichten“ ausführen.");
+    const liste = eigeneListe();
+    vorschlaege.forEach((z) => {
+      const t = findeNachId(z[0], liste);
+      if (!t || t.version) return; // inzwischen von Hand gesetzt: nicht überschreiben
+      blatt.getRange(t.zeile, kopf.indexOf("Version") + 1).setValue(String(z[3]).trim());
+      if (kopf.indexOf("Geändert am") >= 0) blatt.getRange(t.zeile, kopf.indexOf("Geändert am") + 1).setValue(new Date());
+      n++;
+    });
+    oeffentlichAktualisieren();
+  } finally {
+    sperre.releaseLock();
+  }
+  SpreadsheetApp.getActive().toast(`${n} Versionen übernommen.`, "Version");
+  return n;
 }

@@ -454,8 +454,8 @@
   }
 
   // ---------- Formular ----------
-  const FELDER = ["link", "bild", "titel", "reihe", "kollektion", "format", "inhalt", "thema", "raritaet", "preis", "zustand",
-    "verliehenAn", "verliehenAm", "kommentar", "pruefen"];
+  const FELDER = ["link", "bild", "titel", "reihe", "kollektion", "format", "inhalt", "thema", "version", "raritaet", "preis", "zustand",
+    "richtwert", "wertQuelle", "wertStand", "verliehenAn", "verliehenAm", "kommentar", "pruefen"];
 
   function feldSetzen(name, wert) {
     let w = wert === null || wert === undefined ? "" : (name === "preis" ? preisText(wert) : String(wert));
@@ -563,7 +563,7 @@
     if (!a.ok) return;
     zustand.listen = a.listen;
     const optionen = (werte) => werte.map((w) => `<option value="${esc(w)}">`).join("");
-    [["format", "Format"], ["inhalt", "Inhalt"], ["thema", "Thema"]].forEach(([feld, name]) => {
+    [["format", "Format"], ["inhalt", "Inhalt"], ["thema", "Thema"], ["version", "Version"]].forEach(([feld, name]) => {
       const vorhanden = [...$("vorschlag-" + feld).options].map((o) => o.value);
       const alle = [...new Set((a.listen[name] || []).concat(vorhanden))];
       $("vorschlag-" + feld).innerHTML = optionen(alle);
@@ -601,11 +601,17 @@
   }
   const linkSchluessel = (u) => String(u || "").trim().toLowerCase().replace(/[?#].*$/, "").replace(/\/+$/, "");
 
+  // Wie im Apps Script: alte Version und Neuauflage sind zwei verschiedene Tonies; leer/"unbekannt" passt zu allem.
+  function versionenPassen(a, b) {
+    const v = (x) => vereinfachen(x).replace(/\s+/g, " ").trim();
+    const x = v(a), y = v(b);
+    return !x || !y || x === "unbekannt" || y === "unbekannt" || x === y;
+  }
   function findeVorhanden(f) {
     const link = linkSchluessel(f.link);
     const name = vereinfachen(f.titel) + "|" + vereinfachen(f.reihe);
     return zustand.liste.find((t) => (link && linkSchluessel(t.link) === link) ||
-      (f.titel && f.reihe && vereinfachen(t.titel) + "|" + vereinfachen(t.reihe) === name)) || null;
+      (f.titel && f.reihe && vereinfachen(t.titel) + "|" + vereinfachen(t.reihe) === name && versionenPassen(t.version, f.version))) || null;
   }
 
   function vorhandenZeigen(t) {
@@ -656,8 +662,32 @@
     if (zustand.modus === "neu") vorhandenZeigen(a.vorhanden ? findeVorhanden(a.vorhanden) || a.vorhanden : null);
   }
 
+  // ---------- Version aus dem Link (wie versionAusLink im Apps Script) ----------
+  // Nur "neuauflage(-JJJJ)" und "relaunch(-JJJJ)" zählen; "adventskalender-tonie-2025" ist keine Version.
+  function versionAusLink(url) {
+    const m = String(url || "").toLowerCase().match(/(neuauflage|relaunch)(?:-(\d{4}))?(?=[\/\-?#]|$)/);
+    return m ? (m[1] === "relaunch" ? "Relaunch" : "Neuauflage") + (m[2] ? " " + m[2] : "") : "";
+  }
+  function versionVorbelegen() {
+    if (!$("f-version").value.trim()) $("f-version").value = versionAusLink($("f-link").value);
+  }
+  $("f-link").addEventListener("change", versionVorbelegen);
+
+  // Richtwert von Hand eingetragen → Wert-Stand heute (falls leer): dann gilt der Tonie als geprüft.
+  $("f-richtwert").addEventListener("change", () => {
+    if ($("f-richtwert").value.trim() && !$("f-wertStand").value) $("f-wertStand").value = heuteBerlin();
+  });
+  function quelleKnopf() {
+    const url = $("f-wertQuelle").value.trim();
+    const ok = /^https:\/\/\S+$/i.test(url);
+    $("quelle-oeffnen").hidden = !ok;
+    if (ok) $("quelle-oeffnen").href = url;
+  }
+  $("f-wertQuelle").addEventListener("input", quelleKnopf);
+
   // ---------- Link öffnen (nur https) ----------
   function linkKnopf() {
+    quelleKnopf();
     const url = $("f-link").value.trim();
     const ok = /^https:\/\/\S+$/i.test(url);
     $("link-oeffnen").hidden = !ok;
@@ -673,6 +703,7 @@
   // ---------- Bild ----------
   function bildVorschau() {
     linkKnopf();
+    versionVorbelegen();
     const url = $("f-bild").value.trim();
     const img = $("bild-vorschau");
     img.hidden = !/^https:\/\//i.test(url);
@@ -804,7 +835,7 @@
     try { const z = JSON.parse(localStorage.getItem(PIN_SPEICHER)); return z && z.schluessel && z.bis > Date.now() ? z : null; }
     catch (x) { return null; }
   }
-  const PRIVAT = ["preis", "kommentar", "verliehenAn", "verliehenAm"];
+  const PRIVAT = ["preis", "kommentar", "verliehenAn", "verliehenAm", "richtwert", "wertStand"];
 
   function nurLesen(an) {
     $("form-tonie").querySelectorAll("input, select, textarea, button:not([data-aktion='zur-sammlung'])")
@@ -814,7 +845,7 @@
     if (!an) {
       $("eintragen").hidden = false;
       document.querySelector(".eigenes-foto").hidden = false;
-      PRIVAT.forEach((f) => { $("f-" + f).placeholder = { preis: "z. B. 12,50", verliehenAn: "leer = nicht verliehen" }[f] || ""; });
+      PRIVAT.forEach((f) => { $("f-" + f).placeholder = { preis: "z. B. 12,50", verliehenAn: "leer = nicht verliehen", richtwert: "z. B. 25 oder 20–30" }[f] || ""; });
     }
   }
 
@@ -856,11 +887,12 @@
     document.querySelector(".eigenes-foto").hidden = true;
     nurLesen(true);
     if (!privat) {
+      $("f-richtwert").placeholder = "🔒 mit PIN sichtbar";
       $("f-preis").placeholder = "🔒 mit PIN sichtbar";
       $("f-kommentar").placeholder = "🔒 mit PIN sichtbar";
       $("f-verliehenAn").placeholder = t.verliehen === true || t.verliehen === "ja" ? "🔒 verliehen – an wen: mit PIN" : "nicht verliehen";
     } else {
-      ["preis", "kommentar"].forEach((f) => { $("f-" + f).placeholder = "–"; });
+      ["preis", "kommentar", "richtwert"].forEach((f) => { $("f-" + f).placeholder = "–"; });
       $("f-verliehenAn").placeholder = "nicht verliehen";
     }
     $("lesen-pin-knopf").hidden = privat;

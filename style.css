@@ -308,6 +308,7 @@ main {
 
 .marken { display: flex; flex-wrap: wrap; gap: 4px; }
 .marke {
+  background: var(--hintergrund); color: var(--leise); /* Standard; farbige Arten überschreiben das */
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 0.78rem;
@@ -412,7 +413,6 @@ main {
 .treffer-karte .text { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px 12px; }
 .treffer-karte .titel { font-weight: 700; line-height: 1.25; }
 .treffer-karte .marke { align-self: flex-start; white-space: normal; }
-.marke:not(.behalten):not(.verkaufen):not(.fehlt) { background: var(--hintergrund); color: var(--leise); }
 
 .mini-bild { position: relative; display: block; aspect-ratio: 1; background: #fff; }
 .mini-bild img, .mini-platzhalter { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -554,3 +554,12 @@ fieldset.eigenes-foto .klein { margin: 0; }
 
 /* "Auf tonies.com öffnen ↗" unter dem Link-Feld */
 .link-oeffnen { margin-top: 8px; justify-self: start; }
+
+/* Version und Richtwert auf der Karte */
+.marke.version { background: #e1f0f5; color: #145a70; }
+.marke.richtwert { background: #eaf3de; color: #27500a; }
+
+/* Rarität und Richtwert im Formular */
+fieldset.wert { border: 1px solid var(--linie); border-radius: 10px; padding: 10px 12px 12px; display: grid; gap: 10px; }
+fieldset.wert legend { font-weight: 600; font-size: 0.9rem; padding: 0 4px; }
+fieldset.wert .klein { margin: 0; }

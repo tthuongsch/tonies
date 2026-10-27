@@ -1,14 +1,14 @@
 // Baut aus der Tonie-Liste die Karten, die Ansichten und die Zähler.
 (function () {
   const ANSICHTEN = ["alle", "behalten", "verkaufen", "verliehen"];
-  const FILTER = ["reihe", "format", "inhalt", "thema", "zustand", "raritaet"];
+  const FILTER = ["reihe", "format", "inhalt", "thema", "zustand", "raritaet", "version", "geprueft"];
   const TESTMODUS = /testmodus/.test(location.search) ? "&testmodus" : ""; // nur lokal
 
   const zustand = {
     tonies: [],
     ansicht: "alle",
     suche: "",
-    filter: { reihe: "", format: "", inhalt: "", thema: "", zustand: "", raritaet: "" },
+    filter: { reihe: "", format: "", inhalt: "", thema: "", zustand: "", raritaet: "", version: "", geprueft: "" },
     sortierung: "titel",
     entsperrt: false, // mit PIN oder Passwort: private Felder sichtbar
   };
@@ -74,8 +74,21 @@
       vergleich: (a, b) => (a.preis === null) - (b.preis === null) || (a.preis || 0) - (b.preis || 0) || nachTitel(a, b) },
     "preis-ab": { text: "Preis ↓", privat: true,
       vergleich: (a, b) => (a.preis === null) - (b.preis === null) || (b.preis || 0) - (a.preis || 0) || nachTitel(a, b) },
+    richtwert: { text: "Richtwert ↓", privat: true,
+      vergleich: (a, b) => (richtwertZahl(a.richtwert) === null) - (richtwertZahl(b.richtwert) === null) ||
+        (richtwertZahl(b.richtwert) || 0) - (richtwertZahl(a.richtwert) || 0) || nachTitel(a, b) },
     unvollstaendig: { text: "Unvollständige", vergleich: (a, b) => fehlendes(b).length - fehlendes(a).length || nachTitel(a, b) },
   };
+  // "Original" heißt für Menschen "Alte Version"; alles andere wie im Sheet ("Neuauflage 2024")
+  function versionText(v) {
+    return /^original$/i.test(String(v).trim()) ? "Alte Version" : String(v).trim();
+  }
+  // "20–30" → 25, "25" → 25; leer → null (für die Sortierung)
+  function richtwertZahl(r) {
+    const z = String(r || "").replace(",", ".").match(/\d+(?:\.\d+)?/g);
+    return z ? z.map(Number).reduce((a, b) => a + b, 0) / z.length : null;
+  }
+
   function sortieren(liste) {
     return liste.slice().sort(SORTIERUNGEN[zustand.sortierung].vergleich);
   }
@@ -97,6 +110,9 @@
   const werteVon = (t, feld) => {
     if (feld === "zustand") return t.verkaufen > 0 && t.zustand ? [t.zustand] : [];
     if (feld === "raritaet") return [t.raritaet || "Normal"];
+    if (feld === "version") return t.version ? [versionText(t.version)] : [];
+    // "Geprüft" heißt: Wert-Stand ist gefüllt. Der ist privat, also nur entsperrt filterbar.
+    if (feld === "geprueft") return zustand.entsperrt ? [t.wertStand ? "Geprüft" : "Noch nicht geprüft"] : [];
     return String(t[feld] || "").split(",").map((w) => w.trim()).filter(Boolean);
   };
 
@@ -113,6 +129,8 @@
       auswahl.value = zustand.filter[feld];
       if (auswahl.value !== zustand.filter[feld]) zustand.filter[feld] = "";
     });
+    // Filter auf private Werte nur entsperrt anbieten
+    document.querySelectorAll("[data-nur-entsperrt]").forEach((l) => { l.hidden = !zustand.entsperrt; });
   }
 
   // Immer gleiche Pastellfarbe pro Reihe, damit Platzhalter einer Reihe zusammenpassen.
@@ -193,6 +211,8 @@
     }
     if (t.anzahlFehlt) marken.push(`<span class="marke fehlt">Anzahl fehlt</span>`);
     if (t.raritaet && t.raritaet !== "Normal") marken.push(`<span class="marke raritaet">★ ${esc(t.raritaet)}</span>`);
+    if (t.version && !/^unbekannt$/i.test(t.version)) marken.push(`<span class="marke version">${esc(versionText(t.version))}</span>`);
+    if (zustand.entsperrt && t.richtwert) marken.push(`<span class="marke richtwert">Richtwert ${esc(t.richtwert)} €</span>`);
     if (zustand.sortierung === "unvollstaendig" && fehlendes(t).length) {
       marken.push(`<span class="marke fehlt">Fehlt: ${esc(fehlendes(t).join(", "))}</span>`);
     }
@@ -222,7 +242,8 @@
     </li>`;
   }
 
-  const FILTER_NAMEN = { reihe: "Reihe", format: "Format", inhalt: "Inhalt", thema: "Thema", zustand: "Zustand", raritaet: "Rarität" };
+  const FILTER_NAMEN = { reihe: "Reihe", format: "Format", inhalt: "Inhalt", thema: "Thema", zustand: "Zustand", raritaet: "Rarität",
+    version: "Version", geprueft: "Geprüft" };
 
   // Tonies nach Ansicht, Filtern und Suche; mit Suchtext die besten Treffer zuerst,
   // außer es ist bewusst eine andere Sortierung als "A–Z Titel" gewählt.

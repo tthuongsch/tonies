@@ -24,6 +24,10 @@
     "Hinzugefügt am": "hinzugefuegtAm",
     "Geändert am": "geaendertAm",
     "Eigenes Foto": "eigenesFoto",
+    "Version": "version",
+    "Richtwert": "richtwert",
+    "Wert-Quelle": "wertQuelle",
+    "Wert-Stand": "wertStand",
   };
 
   // Spaltenköpfe tolerant vergleichen: Leerzeichen und Groß-/Kleinschreibung egal.
@@ -96,6 +100,11 @@
       hinzugefuegtAm: roh.hinzugefuegtAm || "",
       geaendertAm: roh.geaendertAm || "",
       eigenesFoto: webadresse(roh.eigenesFoto),
+      version: roh.version || "",
+      // Richtwert und Wert-Stand sind privat: kommen nur mit PIN/Passwort (Apps Script), nie aus der CSV.
+      richtwert: roh.richtwert || "",
+      wertQuelle: /^https:\/\//i.test(roh.wertQuelle) ? roh.wertQuelle : "",
+      wertStand: roh.wertStand || "",
     };
     // Ohne Titel und Reihe ist es keine echte Zeile (z. B. eine Leerzeile).
     if (!t.titel && !t.reihe) return null;
