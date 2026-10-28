@@ -12,11 +12,12 @@
     ziel: null,        // vorhandener Eintrag beim Ergänzen
   };
 
-  const BEREICHE = ["bereich-sperre", "bereich-start", "bereich-formular", "bereich-ergebnis", "bereich-weiter"];
+  const BEREICHE = ["bereich-sperre", "bereich-start", "bereich-formular", "bereich-ergebnis", "bereich-weiter", "bereich-pruefen"];
   const VERWALTEN_ID = new URLSearchParams(location.search).get("id");
   // Ein Bereich "Tonie-Check": Foto, Name oder von Hand; danach prüfen oder hinzufügen.
   // Alte Adressen mit ?erkennen öffnen ihn mit dem Reiter Foto.
   const ERKENNEN = new URLSearchParams(location.search).has("erkennen");
+  const PRUEFEN = new URLSearchParams(location.search).has("pruefen");
   const CHECK = "Tonie-Check";
   const REITER_SPEICHER = "tonie-check-reiter";
   function gemerkterReiter() {
@@ -27,7 +28,7 @@
 
   // Titel sofort richtig, damit nicht kurz "Tonie hinzufügen" aufblitzt
   function titelSetzen(text) { document.title = $("seitentitel").textContent = text; }
-  titelSetzen(VERWALTEN_ID ? "Tonie verwalten" : CHECK);
+  titelSetzen(VERWALTEN_ID ? "Tonie verwalten" : PRUEFEN ? "Sammlung prüfen" : CHECK);
 
   // ---------- Zurück zur Sammlung ----------
   // Kam man von der Übersicht, geht es mit history.back() genau dorthin zurück: kein neuer
@@ -147,6 +148,11 @@
       else verwaltenOeffnen(e.eintrag);
       listeLaden();
       return;
+    }
+    if (PRUEFEN) {
+      await listeLaden();
+      listenLaden();
+      return pruefenZeigen();
     }
     zeige("bereich-start");
     reiter(gemerkterReiter());
@@ -1249,8 +1255,8 @@
       <label>Text oder Screenshot von ToyTales einfügen</label>
       <textarea data-kh-text rows="3" placeholder="Auf der ToyTales-Seite alles markieren (Cmd+A), kopieren und hier einfügen"></textarea>
       <div class="knopfreihe links">
-        <button type="button" class="knopf leise" data-kh="einfuegen">📋 Einfügen</button>
-        <label class="knopf leise">🖼 Screenshot<input type="file" accept="image/*" data-kh-bild hidden></label>
+        <button type="button" class="knopf leise" data-kh="einfuegen"><span aria-hidden="true">📋</span>Einfügen</button>
+        <label class="knopf leise"><span aria-hidden="true">🖼</span>Screenshot<input type="file" accept="image/*" data-kh-bild hidden></label>
       </div>
       <p class="klein" data-kh-meldung hidden></p>
       <div class="kh-ergebnis" data-kh-ergebnis hidden></div>
@@ -1279,7 +1285,7 @@
     box.befund = befund;
     const opt = (w, aktiv) => `<option${w === aktiv ? " selected" : ""}>${w}</option>`;
     erg.hidden = false;
-    erg.innerHTML = `<p><strong>Erkannt – bitte prüfen</strong></p>
+    erg.innerHTML = `<p><strong>${befund.vorlage ? "Werte" : "Erkannt – bitte prüfen"}</strong></p>
       ${passtZumTonie(befund.titel, t) ? "" : `<p class="klein warnung-text">Die Seite gehört zu „${esc(befund.titel)}“. Passt das zu „${esc(t.titel)}“?</p>`}
       ${befund.version && t && t.version && vereinfachen(befund.version) !== vereinfachen(t.version)
         ? `<p class="klein warnung-text">Die Seite ist die ${esc(befund.version)}, gewählt ist ${esc(versionText(t.version))}.</p>` : ""}
@@ -1290,10 +1296,13 @@
         <div><label>Wert-Quelle</label><input data-kh-feld="wertQuelle" type="url" value="${esc(befund.quelle)}" placeholder="https://toytales.eu/wiki/…"></div>
       </div>
       <details class="klein"><summary>Woher die Zahlen kommen</summary><ul>${befund.belege.map((b) => `<li>${esc(b)}</li>`).join("")}</ul></details>
-      <div class="knopfreihe links">
+      ${box.closest("#bereich-pruefen") ? `<div class="knopfreihe">
+        <button type="button" class="knopf leise" data-kh="ueberspringen">Überspringen</button>
+        <button type="button" class="knopf" data-kh="uebernehmen">Speichern und weiter</button>
+      </div>` : `<div class="knopfreihe links">
         <button type="button" class="knopf" data-kh="uebernehmen">Übernehmen</button>
         <button type="button" class="knopf leise" data-kh="verwerfen">Verwerfen</button>
-      </div>`;
+      </div>`}`;
   }
   function khMeldung(box, text, art) {
     const m = box.querySelector("[data-kh-meldung]");
@@ -1303,6 +1312,7 @@
   }
   // Zu welchem Tonie gehört die Kopierhilfe gerade? Ergebnisansicht oder Formular
   function khTonie(box) {
+    if (box.closest("#bereich-pruefen")) return zustand.pruefTonie;
     return box.closest("#bereich-ergebnis") ? zustand.ergebnis.t : formularWerte();
   }
   function khText(box) {
@@ -1319,6 +1329,7 @@
     const feld = (f) => box.querySelector(`[data-kh-feld="${f}"]`).value.trim();
     const w = { raritaet: feld("raritaet"), richtwert: feld("richtwert"), richtwertOvp: feld("richtwertOvp"),
       wertQuelle: feld("wertQuelle"), wertStand: heuteBerlin() };
+    if (box.closest("#bereich-pruefen")) return pruefenSpeichern(box, w);
     const imErgebnis = !!box.closest("#bereich-ergebnis");
     if (!imErgebnis) {
       werteInsFormular(w);
@@ -1367,6 +1378,7 @@
     }
     if (k.dataset.kh === "verwerfen") { box.querySelector("[data-kh-ergebnis]").hidden = true; box.querySelector("[data-kh-text]").value = ""; }
     if (k.dataset.kh === "uebernehmen") khUebernehmen(box);
+    if (k.dataset.kh === "ueberspringen") pruefenUeberspringen();
   });
   document.addEventListener("change", async (ev) => {
     const inp = ev.target.closest("[data-kh-bild]");
@@ -1387,6 +1399,79 @@
     } finally {
       inp.value = "";
     }
+  });
+
+  // ---------- Sammlung prüfen: der Reihe nach Rarität und Richtwert nachtragen ----------
+  // Es wird nichts automatisch geprüft: Du öffnest ToyTales, fügst ein und speicherst, Tonie für Tonie.
+  // "Geprüft" = Wert-Stand gefüllt. Übersprungene kommen in diesem Tab nicht wieder, beim nächsten Mal schon.
+  const UEBERSPRUNGEN = "tonie-pruefen-uebersprungen";
+  function uebersprungen() {
+    try { return JSON.parse(sessionStorage.getItem(UEBERSPRUNGEN)) || []; } catch (x) { return []; }
+  }
+  const nachReihe = (a, b) => a.reihe.localeCompare(b.reihe, "de") || a.titel.localeCompare(b.titel, "de");
+
+  function pruefenZeigen() {
+    titelSetzen("Sammlung prüfen");
+    const alle = zustand.liste;
+    const geprueft = alle.filter((t) => t.wertStand).length;
+    const weg = uebersprungen();
+    const offen = alle.filter((t) => !t.wertStand && weg.indexOf(t.id) < 0).sort(nachReihe);
+    const t = offen[0];
+    zustand.pruefTonie = t || null;
+    const fortschritt = `<p class="fortschritt-text"><strong>${geprueft} von ${alle.length} geprüft</strong>${weg.length ? ` · ${weg.length} übersprungen` : ""}</p>
+      <div class="fortschritt"><span style="width:${alle.length ? Math.round(geprueft / alle.length * 100) : 0}%"></span></div>`;
+    if (!t) {
+      $("bereich-pruefen").innerHTML = `<div class="karte-flaeche pruefen">${fortschritt}
+        <p class="fertig">${geprueft === alle.length ? `Alle ${alle.length} Tonies sind geprüft.` : "Für jetzt bist du durch: Die übrigen hast du übersprungen."}</p>
+        <div class="knopfreihe">
+          ${weg.length ? `<button type="button" class="knopf leise" data-aktion="pruefen-neu">Übersprungene noch einmal</button>` : ""}
+          <button type="button" class="knopf" data-aktion="zur-sammlung">Zur Sammlung</button>
+        </div></div>`;
+      return zeige("bereich-pruefen");
+    }
+    $("bereich-pruefen").innerHTML = `<div class="karte-flaeche pruefen">${fortschritt}
+      <div class="pruefen-kopf">
+        <div class="katalog-bild">${zoomBild(bildGross(t.eigenesFoto || t.bild, 400), t.titel)}</div>
+        <div>
+          <p class="reihe">${esc([t.reihe, t.kollektion].filter(Boolean).join(" · "))}</p>
+          <h2 class="titel">${esc(t.titel)}</h2>
+          <div class="marken">${t.version ? versionMarke(t.version) : ""}</div>
+          <p class="klein">Noch ${offen.length} offen.</p>
+        </div>
+      </div>
+      ${quelleKnopfHtml(t, t.wertQuelle)}
+      ${kopierhilfeHtml()}
+    </div>`;
+    zeige("bereich-pruefen");
+    const box = $("bereich-pruefen").querySelector("[data-kopierhilfe]");
+    // Felder gleich zeigen (mit den bisherigen Werten), damit man auch ohne Einfügen eintragen kann
+    befundZeigen(box, { erkannt: true, raritaet: t.raritaet || "Normal", gebraucht: t.richtwert || "", ovp: t.richtwertOvp || "",
+      quelle: t.wertQuelle || "", titel: "", version: "", vorlage: true, belege: ["Noch nichts eingefügt: bisherige Werte aus deinem Sheet."] }, t);
+    quelleKnopfFuellen($("bereich-pruefen"), t, t.wertQuelle);
+  }
+
+  async function pruefenSpeichern(box, w) {
+    const t = zustand.pruefTonie;
+    const felder = Object.assign({}, t, w);
+    delete felder.pruefen;
+    const a = await anfrage("aendern", { id: t.id, stand: t.geaendertAm, felder });
+    if (!a.ok) {
+      return khMeldung(box, a.code === "konflikt" ? "Dieser Tonie wurde inzwischen geändert. Bitte die Seite neu laden." : a.fehler, "fehler");
+    }
+    Object.assign(t, a.eintrag);
+    pruefenZeigen();
+  }
+
+  function pruefenUeberspringen() {
+    const weg = uebersprungen();
+    if (zustand.pruefTonie) weg.push(zustand.pruefTonie.id);
+    try { sessionStorage.setItem(UEBERSPRUNGEN, JSON.stringify(weg)); } catch (x) {}
+    pruefenZeigen();
+  }
+  document.addEventListener("click", (ev) => {
+    if (!ev.target.closest("[data-aktion='pruefen-neu']")) return;
+    try { sessionStorage.removeItem(UEBERSPRUNGEN); } catch (x) {}
+    pruefenZeigen();
   });
 
   // ---------- Hilfen ----------

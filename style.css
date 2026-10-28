@@ -609,3 +609,12 @@ fieldset.wert .klein { margin: 0; }
 .kopierhilfe [data-kh-meldung][data-art="ok"] { color: var(--behalten); font-weight: 600; }
 .kopierhilfe [data-kh-meldung][data-art="fehler"] { color: var(--fehlt); font-weight: 600; }
 .kopierhilfe .knopf { gap: 6px; }
+
+/* Sammlung prüfen */
+.pruefen { display: grid; gap: 10px; }
+.fortschritt-text { margin: 0; }
+.fortschritt { height: 8px; border-radius: 4px; background: var(--hintergrund); overflow: hidden; }
+.fortschritt span { display: block; height: 100%; background: var(--akzent); }
+.pruefen-kopf { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: start; }
+.pruefen-kopf .titel { margin: 0; font-size: 1.05rem; }
+.pruefen-kopf .reihe, .pruefen-kopf .klein { margin: 0; }

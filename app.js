@@ -52,12 +52,12 @@
   // Neueste zuerst; ohne Datum ("unbekannt") ans Ende
   const nachDatum = (feld) => (a, b) => (b[feld] || "").localeCompare(a[feld] || "") || nachTitel(a, b);
 
-  // Was einem Tonie noch fehlt (für "Unvollständige zuerst"). Den Preis prüfen wir nur entsperrt.
+  // Was einem Tonie Wichtiges fehlt (für "Unvollständige"): Bild, beim Verkauf Zustand und Preis.
+  // Link und Thema zählen bewusst nicht, die bleiben oft absichtlich leer. Den Preis prüfen wir nur entsperrt.
+  // Rarität und Richtwert laufen über "Sammlung prüfen" und den Filter "Noch nicht geprüft".
   function fehlendes(t) {
     const f = [];
     if (!t.eigenesFoto && !t.bild) f.push("Bild");
-    if (!t.link) f.push("Link");
-    if (!t.thema) f.push("Thema");
     if (t.verkaufen > 0 && !t.zustand) f.push("Zustand");
     if (t.verkaufen > 0 && zustand.entsperrt && t.preis === null) f.push("Preis");
     return f;
