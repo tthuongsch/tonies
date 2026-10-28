@@ -7,7 +7,7 @@
   <meta name="robots" content="noindex, nofollow">
   <!-- Versionsnummer (?v=…) bei jeder neuen Fassung erhöhen: Dann lädt der Browser die Dateien neu
        statt eine alte Fassung aus dem Zwischenspeicher zu mischen. -->
-  <link rel="stylesheet" href="style.css?v=8">
+  <link rel="stylesheet" href="style.css?v=9">
 </head>
 <body class="erfassen">
   <header class="kopf">
@@ -90,12 +90,26 @@
         </div>
         <p id="foto-meldung" class="meldung" role="alert" hidden></p>
         <p id="foto-ueberschrift" class="hinweis" hidden></p>
+        <!-- Vorschläge der Fotoerkennung: Versionen gruppiert, dein Foto neben den Katalogbildern -->
+        <div id="foto-vorschlaege" class="vorschlaege"></div>
         <ul id="foto-treffer" class="karten treffer"></ul>
         <div id="foto-weiter" class="knopfreihe" hidden>
           <button type="button" class="knopf leise" data-aktion="selbst-suchen">Nicht dabei? Selbst suchen</button>
           <button type="button" id="foto-netz" class="knopf leise" data-aktion="netz-foto">Im Netz suchen (ca. 1–4 Cent)</button>
           <button type="button" class="knopf leise" data-reiter="hand">Von Hand eintragen</button>
         </div>
+      </div>
+    </section>
+
+    <!-- Ergebnis nach der Auswahl: noch nichts gespeichert -->
+    <section id="bereich-ergebnis" hidden></section>
+
+    <!-- Nach dem Speichern aus "Tonie erkennen": gleich den nächsten erfassen -->
+    <section id="bereich-weiter" class="karte-flaeche" hidden>
+      <p id="weiter-text" class="fertig"></p>
+      <div class="knopfreihe">
+        <button type="button" class="knopf leise" data-aktion="zur-sammlung">Zur Sammlung</button>
+        <button type="button" class="knopf" data-aktion="naechster-tonie">Nächster Tonie 📷</button>
       </div>
     </section>
 
@@ -179,6 +193,8 @@
           <div>
             <label for="f-version">Version</label>
             <input id="f-version" name="version" list="vorschlag-version" placeholder="z. B. Original, Neuauflage 2024">
+            <p id="version-frage" class="klein" data-art="hinweis" hidden>Ist dein Exemplar wirklich die <span id="version-frage-name"></span>?
+              <button type="button" class="knopf leise klein-knopf" data-aktion="version-alt">Nein, alte Version</button></p>
           </div>
         </div>
         <p id="listen-hinweis" class="klein" data-art="hinweis" hidden></p>
@@ -276,12 +292,18 @@
     <datalist id="vorschlag-inhalt"></datalist>
     <datalist id="vorschlag-thema"></datalist>
     <datalist id="vorschlag-version"></datalist>
+
+    <!-- Bild groß ansehen -->
+    <dialog id="zoom" class="fenster zoom" aria-label="Bild groß">
+      <img id="zoom-bild" alt="">
+      <div class="knopfreihe"><button type="button" class="knopf leise" data-schliessen>Schließen</button></div>
+    </dialog>
   </main>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-  <script src="config.js?v=8"></script>
-  <script src="data.js?v=8"></script>
-  <script src="suche.js?v=8"></script>
+  <script src="config.js?v=9"></script>
+  <script src="data.js?v=9"></script>
+  <script src="suche.js?v=9"></script>
   <script>
     // Testmodus nur lokal: echte Abläufe gegen nachgebautes Sheet, ohne Google.
     if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && /testmodus/.test(location.search)) {
@@ -289,6 +311,6 @@
         '<script src="tools/gs_attrappe.js"><\/script><script src="tools/erfassen_testmodus.js"><\/script>');
     }
   </script>
-  <script src="erfassen.js?v=8"></script>
+  <script src="erfassen.js?v=9"></script>
 </body>
 </html>

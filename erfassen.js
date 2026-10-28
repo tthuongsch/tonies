@@ -12,12 +12,15 @@
     ziel: null,        // vorhandener Eintrag beim Ergänzen
   };
 
-  const BEREICHE = ["bereich-sperre", "bereich-start", "bereich-formular"];
+  const BEREICHE = ["bereich-sperre", "bereich-start", "bereich-formular", "bereich-ergebnis", "bereich-weiter"];
   const VERWALTEN_ID = new URLSearchParams(location.search).get("id");
+  // "Tonie erkennen" (Menü) und der Foto-Reiter in "Hinzufügen" sind derselbe Bildschirm.
+  const ERKENNEN = new URLSearchParams(location.search).has("erkennen");
   const TESTMODUS = /testmodus/.test(location.search) ? "?testmodus" : "";
 
   // Titel sofort richtig, damit nicht kurz "Tonie hinzufügen" aufblitzt
-  document.title = $("seitentitel").textContent = VERWALTEN_ID ? "Tonie verwalten" : "Tonie hinzufügen";
+  function titelSetzen(text) { document.title = $("seitentitel").textContent = text; }
+  titelSetzen(VERWALTEN_ID ? "Tonie verwalten" : ERKENNEN ? "Tonie erkennen" : "Tonie hinzufügen");
 
   // ---------- Zurück zur Sammlung ----------
   // Kam man von der Übersicht, geht es mit history.back() genau dorthin zurück: kein neuer
@@ -139,7 +142,7 @@
       return;
     }
     zeige("bereich-start");
-    reiter("suchen");
+    reiter(ERKENNEN ? "foto" : "suchen");
     katalogLaden();
     listenLaden();
     await listeLaden();
@@ -156,6 +159,7 @@
       const e = {};
       k.felder.forEach((f, i) => { e[f] = z[i]; });
       e.neupreis = typeof e.neupreis === "number" ? e.neupreis : null;
+      e.version = versionAusLink(e.link);
       return e;
     });
   }
@@ -179,9 +183,12 @@
       .map((t) => Object.assign({}, t.eintrag, { quelle: "liste", vorhanden: t.eintrag }));
     const schonDa = {};
     const name = (t) => vereinfachen(t.titel) + "|" + vereinfachen(t.reihe);
-    ausListe.forEach((t) => { schonDa[name(t)] = true; if (t.link) schonDa[linkSchluessel(t.link)] = true; });
+    ausListe.forEach((t) => { (schonDa[name(t)] = schonDa[name(t)] || []).push(t.version); if (t.link) schonDa[linkSchluessel(t.link)] = [true]; });
+    // Katalogeintrag nur weglassen, wenn es derselbe Tonie in derselben Version ist (wie im Apps Script)
+    const doppelt = (k) => (k.link && schonDa[linkSchluessel(k.link)]) ||
+      (schonDa[name(k)] && (!k.version || schonDa[name(k)].some((v) => v && vereinfachen(v) === vereinfachen(k.version))));
     const ausKatalog = TonieSuche.suchen(zustand.katalog || [], text).map((t) => t.eintrag)
-      .filter((k) => !schonDa[name(k)] && !(k.link && schonDa[linkSchluessel(k.link)]))
+      .filter((k) => !doppelt(k))
       .slice(0, max - ausListe.length)
       .map((k) => Object.assign({}, k, { quelle: "katalog", vorhanden: findeVorhanden(k) }));
     return ausListe.concat(ausKatalog);
@@ -202,6 +209,9 @@
     document.querySelectorAll(".reiter [data-reiter]").forEach((k) => k.setAttribute("aria-pressed", k.dataset.reiter === name));
     if (name === "hand") return formularOeffnen({}, null);
     zeige("bereich-start");
+    // Im Einstieg "Tonie erkennen" gibt es nur den Foto-Teil, ohne Reiter
+    document.querySelector(".reiter").hidden = ERKENNEN;
+    if (name === "foto") titelSetzen(ERKENNEN ? "Tonie erkennen" : "Tonie hinzufügen");
     if (name === "suchen") $("suchtext").focus();
   }
   document.addEventListener("click", (ev) => {
@@ -284,7 +294,9 @@
     const k = ev.target.closest("[data-treffer]");
     if (!k) return;
     const t = zustand.trefferlisten[id][Number(k.dataset.treffer)];
-    formularOeffnen(t, t.vorhanden);
+    // Aus der Fotoerkennung erst die Ergebnisansicht ("Habe ich schon?"), aus der Textsuche gleich das Formular
+    if (id === "treffer") formularOeffnen(t, t.vorhanden);
+    else ergebnisZeigen(t, null);
   }));
 
   // ---------- Foto ----------
@@ -350,6 +362,7 @@
 
   function fotoErgebnisLeeren() {
     trefferZeigen([], "foto-treffer");
+    $("foto-vorschlaege").innerHTML = "";
     $("foto-ueberschrift").hidden = true;
     $("foto-weiter").hidden = true;
     meldung("foto-meldung", "");
@@ -397,7 +410,8 @@
     if (!b.ok) return meldung("foto-meldung", b.fehler);
     meldung("foto-meldung", "");
     const text = beschreibungText(zustand.beschreibung);
-    fotoErgebnis(b.treffer.length ? `${text} Passende Tonies:` : `${text} Kein passender Tonie in Liste oder Katalog.`, b.treffer);
+    fotoErgebnis(b.treffer.length ? `${text} Passende Tonies:` : `${text} Kein passender Tonie in Liste oder Katalog.`, []);
+    vorschlaegeZeigen(b.treffer, b.version || {});
   }
 
   function selbstSuchen() {
@@ -430,6 +444,8 @@
     if (aktion === "ergaenzen") ergaenzenModus(zustand.vorhanden);
     if (aktion === "auslesen") auslesen();
     if (aktion === "zur-sammlung") zurueckZurSammlung();
+    if (aktion === "naechster-tonie" || aktion === "naechsten-erkennen") naechsteErkennung();
+    if (aktion === "version-alt") { $("f-version").value = "Original"; versionFrage(); }
     if (aktion === "netz-text") netzSuchenText();
     if (aktion === "foto-los") fotoLos();
     if (aktion === "selbst-suchen") selbstSuchen();
@@ -475,6 +491,8 @@
 
   function formularOeffnen(felder, vorhanden) {
     nurLesen(false);
+    zustand.ausErkennen = false;
+    zustand.andereVersion = false;
     zustand.modus = "neu";
     zustand.ziel = null;
     zustand.eintrag = null;
@@ -670,7 +688,15 @@
   }
   function versionVorbelegen() {
     if (!$("f-version").value.trim()) $("f-version").value = versionAusLink($("f-link").value);
+    versionFrage();
   }
+  // Steht im Katalog nur die Neuauflage, ausdrücklich nachfragen, ob dein Exemplar nicht die alte Version ist.
+  function versionFrage() {
+    const v = $("f-version").value.trim();
+    $("version-frage").hidden = !(/neuauflage|relaunch/i.test(v) && zustand.modus !== "verwalten" && zustand.modus !== "lesen");
+    $("version-frage-name").textContent = v;
+  }
+  $("f-version").addEventListener("input", versionFrage);
   $("f-link").addEventListener("change", versionVorbelegen);
 
   // Richtwert von Hand eingetragen → Wert-Stand heute (falls leer): dann gilt der Tonie als geprüft.
@@ -778,7 +804,7 @@
       daten = Object.assign({ modus: "ergaenzen", ziel: { link: ziel.link, titel: ziel.titel, reihe: ziel.reihe },
         plusBehalten: n.behalten, plusVerkaufen: n.verkaufen, felder }, foto);
     } else {
-      daten = Object.assign({ modus: "neu", felder: Object.assign(felder, n) }, foto);
+      daten = Object.assign({ modus: "neu", felder: Object.assign(felder, n), andereVersion: !!zustand.andereVersion }, foto);
     }
     const a = await anfrage("eintragen", daten);
     if (!a.ok && a.code === "vorhanden") {
@@ -787,9 +813,10 @@
       return window.scrollTo(0, 0);
     }
     if (!a.ok) return meldung("formular-meldung", a.fehler);
-    zurueckZurSammlung(a.ergebnis === "ergaenzt"
-      ? `„${a.titel}“ aktualisiert: ${anzahlText(a)}`
-      : `„${a.titel}“ eingetragen`);
+    const text = a.ergebnis === "ergaenzt" ? `„${a.titel}“ aktualisiert: ${anzahlText(a)}` : `„${a.titel}“ eingetragen`;
+    // Aus "Tonie erkennen": gleich den nächsten Tonie fotografieren statt zurück zur Übersicht
+    if (zustand.ausErkennen) return weiterZeigen(text);
+    zurueckZurSammlung(text);
   });
 
   // ---------- Tonie verwalten: speichern, Konflikt, archivieren ----------
@@ -929,6 +956,236 @@
     meldung("lesen-pin-meldung", "");
     lesenStart();
   });
+
+  // ---------- Tonie erkennen: Vorschläge, Versionen, Ergebnis ----------
+  const versionText = (v) => /^original$/i.test(String(v || "").trim()) ? "Alte Version"
+    : /^unbekannt$/i.test(String(v || "").trim()) ? "Version unbekannt" : String(v || "").trim();
+  const istNeu = (v) => /neuauflage|relaunch/i.test(v || "");
+  const bildGross = (url, n) => String(url || "").replace(/\bw_\d+,h_\d+\b/, `w_${n},h_${n}`);
+  // Wie versionsGruppe im Apps Script: gleicher Tonie ohne Versionswörter
+  function versionsGruppe(t) {
+    const ohne = (x) => vereinfachen(x).replace(/\((.*?)\)/g, " ")
+      .replace(/\b(neuauflage|relaunch|alte version|original|neu)\b/g, " ").replace(/\b\d{4}\b/g, " ")
+      .replace(/[^a-z0-9]+/g, " ").trim();
+    return ohne(t.titel) + "|" + ohne(t.reihe);
+  }
+  const zoomBild = (url, alt) => /^(https:|data:image)/.test(url || "")
+    ? `<img src="${esc(url)}" alt="${esc(alt || "")}" data-zoom loading="lazy" onerror="this.remove()">` : "";
+  function deineFotos() {
+    return zustand.fotos.length ? `<div class="eigene-fotos"><span class="klein">Dein Foto</span>
+      ${zustand.fotos.map((f, i) => zoomBild(f, "Dein Foto " + (i + 1))).join("")}</div>` : "";
+  }
+  const SICHER_TEXT = { hoch: "sehr wahrscheinlich", mittel: "wahrscheinlich", niedrig: "vielleicht" };
+  const sicherMarke = (s) => s ? `<span class="marke sicher-${esc(s)}">${SICHER_TEXT[s] || esc(s)}</span>` : "";
+  const versionMarke = (v) => v ? `<span class="marke version">${esc(versionText(v))}</span>`
+    : `<span class="marke">Version ohne Angabe</span>`;
+  // kurz = in schmalen Spalten nur "tonies.com ↗"
+  const shopKnopf = (t, kurz) => /^https:\/\//.test(t.link || "")
+    ? `<a class="knopf leise" href="${esc(t.link)}" target="_blank" rel="noopener noreferrer">${kurz ? "" : "Auf "}${esc(hostVon(t.link))}${kurz ? "" : " ansehen"} ↗</a>` : "";
+  function hostVon(url) { try { return new URL(url).hostname.replace(/^www\./, ""); } catch (x) { return "der Seite"; } }
+
+  // Ein Satz zum Unterschied aus den Katalogdaten (kostenlos)
+  function unterschiedSatz(ts) {
+    const teile = ts.filter((t) => t.version).map((t) => {
+      const anders = [];
+      if (ts.some((o) => o !== t && vereinfachen(o.titel) !== vereinfachen(t.titel))) anders.push(`Titel „${t.titel}“`);
+      if (t.untertitel && ts.some((o) => o !== t && o.untertitel !== t.untertitel)) anders.push(`Untertitel „${t.untertitel}“`);
+      return `${versionText(t.version)}: ${anders.length ? anders.join(", ") : "anderes Cover"}`;
+    });
+    return teile.length ? teile.join(" · ") + "." : "Die Versionen unterscheiden sich vor allem am Cover.";
+  }
+
+  function vorschlaegeZeigen(treffer, urteil) {
+    zustand.vorschlaege = treffer;
+    const gruppen = [];
+    const stelle = {};
+    treffer.forEach((t, i) => {
+      const g = t.gruppe || versionsGruppe(t);
+      if (!(g in stelle)) { stelle[g] = gruppen.length; gruppen.push([]); }
+      gruppen[stelle[g]].push(i);
+    });
+    $("foto-vorschlaege").innerHTML = gruppen.map((g) => g.length > 1 ? gruppeKarte(g, urteil) : einzelKarte(g[0])).join("");
+  }
+
+  function einzelKarte(i) {
+    const t = zustand.vorschlaege[i];
+    const vorhanden = t.vorhanden || findeVorhanden(t);
+    return `<article class="vorschlag">
+      <div class="vergleich">${deineFotos()}<div class="katalog-bild">${zoomBild(bildGross(t.bild, 500), t.titel)}</div></div>
+      <p class="reihe">${esc([t.reihe, t.kollektion].filter(Boolean).join(" · "))}</p>
+      <h3 class="titel">${esc(t.titel)}</h3>
+      <div class="marken">${t.version ? versionMarke(t.version) : ""}${sicherMarke(t.sicherheit)}
+        ${vorhanden ? `<span class="marke behalten">In deiner Liste: ${anzahlText(vorhanden)}</span>` : ""}</div>
+      <div class="knopfreihe links">
+        <button type="button" class="knopf" data-waehle="${i}">Das ist meiner</button>
+        ${shopKnopf(t)}
+        ${istNeu(t.version) ? `<button type="button" class="knopf leise" data-waehle="${i}" data-version="Original">Meiner ist die alte Version</button>` : ""}
+      </div>
+    </article>`;
+  }
+
+  function gruppeKarte(ids, urteil) {
+    const ts = ids.map((i) => zustand.vorschlaege[i]);
+    const empfohlen = ids.find((i) => zustand.vorschlaege[i].schluessel === urteil.schluessel);
+    const namen = ts.map((t) => (versionText(t.version) || "Version ohne Angabe").replace(/^Alte /, "alte ")).join(" oder die ");
+    const urteilHtml = empfohlen !== undefined
+      ? `<p class="urteil ${urteil.sicher ? "sicher" : "unsicher"}">${esc(urteil.grund || "")}
+          <span class="marke ${urteil.sicher ? "sicher-hoch" : "sicher-mittel"}">${urteil.sicher ? "ziemlich sicher" : "unsicher"}</span></p>
+         ${urteil.sicher ? "" : `<p class="urteil-frage">Ist es die ${esc(namen)}?</p>`}`
+      : `<p class="urteil-frage">Ist es die ${esc(namen)}?</p>`;
+    const zwei = ts.filter((t) => t.bild).slice(0, 2);
+    return `<article class="vorschlag gruppe">
+      <p class="gruppe-kopf"><strong>Gleicher Tonie, ${ts.length} Versionen</strong> · ${esc(ts[0].titel)}</p>
+      <p class="klein">${esc(unterschiedSatz(ts))}</p>
+      ${deineFotos()}
+      <div class="versionen">${ids.map((i) => {
+        const t = zustand.vorschlaege[i];
+        return `<div class="version-spalte${i === empfohlen ? " empfohlen" : ""}">
+          <div class="katalog-bild">${zoomBild(bildGross(t.bild, 500), t.titel)}</div>
+          <div class="marken">${versionMarke(t.version)}${sicherMarke(t.sicherheit)}</div>
+          <button type="button" class="knopf${i === empfohlen ? "" : " leise"}" data-waehle="${i}">Diese Version</button>
+          ${shopKnopf(t, true)}
+        </div>`;
+      }).join("")}</div>
+      ${urteilHtml}
+      <div class="knopfreihe links">
+        <button type="button" class="knopf leise" data-waehle="${ids[0]}" data-version="unbekannt">Weiß ich nicht</button>
+        ${zwei.length === 2 ? `<button type="button" class="knopf leise" data-unterschiede="${ids.filter((i) => zustand.vorschlaege[i].bild).slice(0, 2).join(",")}">Unterschiede anzeigen</button>` : ""}
+      </div>
+      <p class="klein unterschiede-text" hidden></p>
+    </article>`;
+  }
+
+  $("foto-vorschlaege").addEventListener("click", async (ev) => {
+    const w = ev.target.closest("[data-waehle]");
+    if (w) return ergebnisZeigen(zustand.vorschlaege[Number(w.dataset.waehle)], w.dataset.version || null);
+    const u = ev.target.closest("[data-unterschiede]");
+    if (!u) return;
+    const ziel = u.closest(".gruppe").querySelector(".unterschiede-text");
+    u.disabled = true;
+    const a = await anfrage("unterschiede", { versionen: u.dataset.unterschiede.split(",").map((i) => zustand.vorschlaege[+i].schluessel) });
+    budgetZeigen(a.budget);
+    ziel.hidden = false;
+    ziel.textContent = a.ok ? a.unterschiede : a.fehler;
+    u.disabled = !a.ok ? false : true;
+  });
+
+  // Bild antippen → groß
+  document.addEventListener("click", (ev) => {
+    const b = ev.target.closest("img[data-zoom]");
+    if (!b) return;
+    $("zoom-bild").src = bildGross(b.src, 1000);
+    $("zoom").showModal();
+  });
+  $("zoom").addEventListener("click", (ev) => { if (ev.target === $("zoom") || ev.target.closest("[data-schliessen]")) $("zoom").close(); });
+
+  // "Habe ich schon?" für genau diese Version; andere Versionen als Hinweis
+  function inDerListe(t) {
+    const gruppe = versionsGruppe(t);
+    const gleich = zustand.liste.filter((x) => (t.link && linkSchluessel(x.link) === linkSchluessel(t.link)) || versionsGruppe(x) === gruppe);
+    const v = vereinfachen(t.version);
+    const genau = gleich.filter((x) => (t.link && linkSchluessel(x.link) === linkSchluessel(t.link)) ||
+      (v && v !== "unbekannt" ? vereinfachen(x.version) === v || !x.version : true));
+    return { genau: genau[0] || null, andere: gleich.filter((x) => genau.indexOf(x) < 0) };
+  }
+
+  // Quellen für Rarität und Richtwert. Nur hier steht etwas über ToyTales (Link-Aufbau).
+  const Quellen = {
+    toytales: {
+      name: "ToyTales",
+      suchLink(t) {
+        const v = t.version && !/^(original|unbekannt)$/i.test(t.version) ? t.version : "";
+        return "https://www.google.com/search?q=" + encodeURIComponent(`site:toytales.eu ${t.titel} ${t.reihe} ${v}`.replace(/\s+/g, " ").trim());
+      },
+    },
+  };
+
+  function ergebnisZeigen(roh, versionWahl) {
+    const t = Object.assign({}, roh);
+    if (versionWahl) {
+      // Alte Version gewählt, im Katalog steht aber die Neuauflage: deren Link gehört nicht zu deinem Exemplar.
+      if (versionWahl === "Original" && istNeu(roh.version)) t.link = "";
+      t.version = versionWahl;
+    }
+    const { genau, andere } = inDerListe(t);
+    zustand.ergebnis = { t, genau };
+    const werte = genau && (genau.raritaet || genau.richtwert || genau.wertStand)
+      ? `${genau.raritaet ? "★ " + esc(genau.raritaet) : "Rarität: Normal"}${genau.richtwert ? " · Richtwert " + esc(genau.richtwert) + " €" : ""}
+         ${genau.wertStand ? `<span class="klein">(von dir übernommen am ${esc(datumKurz(genau.wertStand))})</span>` : `<span class="klein">(noch nicht geprüft)</span>`}`
+      : `<span class="klein">Noch nicht geprüft.</span>`;
+    const quelle = genau && genau.wertQuelle ? genau.wertQuelle : Quellen.toytales.suchLink(t);
+    $("bereich-ergebnis").innerHTML = `<div class="karte-flaeche ergebnis">
+      <div class="vergleich">${deineFotos()}<div class="katalog-bild">${zoomBild(bildGross(t.eigenesFoto || t.bild, 600), t.titel)}</div></div>
+      <p class="reihe">${esc([t.reihe, t.kollektion].filter(Boolean).join(" · "))}</p>
+      <h2 class="titel">${esc(t.titel)}</h2>
+      <div class="marken">${versionMarke(t.version)}</div>
+      ${shopKnopf(t) ? `<div class="knopfreihe links">${shopKnopf(t)}</div>` : ""}
+      <div class="ergebnis-block">
+        <h3>Habe ich schon?</h3>
+        <p>${genau ? `<strong>Ja:</strong> ${genau.behalten}× behalten · ${genau.verkaufen}× verkaufen · ${genau.verliehenAn || genau.verliehen === "ja" ? "verliehen" : "nicht verliehen"}`
+          : "<strong>Nein</strong>, diese Version ist noch nicht in deiner Sammlung."}</p>
+        ${andere.length ? `<p class="klein">Du hast auch: ${andere.map((x) => `${esc(versionText(x.version) || "ohne Versionsangabe")} (${anzahlText(x)})`).join(", ")}.</p>` : ""}
+      </div>
+      <div class="ergebnis-block">
+        <h3>Rarität und Richtwert</h3>
+        <p>${werte}</p>
+        <div class="knopfreihe links"><a class="knopf leise" href="${esc(quelle)}" target="_blank" rel="noopener noreferrer">Bei ${Quellen.toytales.name} prüfen ↗</a></div>
+      </div>
+      <div class="knopfreihe">
+        ${genau ? `<button type="button" class="knopf" data-ergebnis="erhoehen">Anzahl erhöhen</button>
+          <button type="button" class="knopf leise" data-ergebnis="andere-version">Neuer Eintrag für andere Version</button>`
+          : `<button type="button" class="knopf" data-ergebnis="hinzufuegen">Zur Sammlung hinzufügen</button>`}
+      </div>
+      <div class="knopfreihe">
+        <button type="button" class="knopf leise" data-aktion="zur-sammlung">✕ Schließen</button>
+        <button type="button" class="knopf leise" data-aktion="naechsten-erkennen">Nächsten erkennen 📷</button>
+      </div>
+    </div>`;
+    titelSetzen(ERKENNEN ? "Tonie erkennen" : "Tonie hinzufügen");
+    zeige("bereich-ergebnis");
+  }
+
+  $("bereich-ergebnis").addEventListener("click", (ev) => {
+    const k = ev.target.closest("[data-ergebnis]");
+    if (!k) return;
+    const { t, genau } = zustand.ergebnis;
+    formularOeffnen(k.dataset.ergebnis === "erhoehen" ? genau : t, null);
+    if (k.dataset.ergebnis === "erhoehen") ergaenzenModus(genau);
+    if (k.dataset.ergebnis === "andere-version") {
+      zustand.andereVersion = true;
+      $("f-version").value = "";
+      $("f-version").focus();
+      meldung("formular-meldung", "Neuer Eintrag: Bitte die Version deines Exemplars angeben.", "hinweis");
+    }
+    zustand.ausErkennen = true;
+    versionFrage();
+  });
+
+  function weiterZeigen(text) {
+    $("weiter-text").textContent = text;
+    zeige("bereich-weiter");
+    listeLaden();
+  }
+
+  // Neue Erkennung: Fotos leeren und gleich die Kamera öffnen. Das muss direkt im Klick passieren,
+  // sonst blockiert der Browser das Öffnen.
+  function naechsteErkennung() {
+    zustand.fotos = [];
+    zustand.beschreibung = null;
+    zustand.ausErkennen = false;
+    zustand.andereVersion = false;
+    $("foto-hinweis").value = "";
+    $("foto-sofort").hidden = true;
+    fotoAnsichtAktualisieren();
+    fotoErgebnisLeeren();
+    reiter("foto");
+    $("foto-kamera").click();
+  }
+
+  function datumKurz(iso) {
+    const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[3]}.${m[2]}.${m[1].slice(2)}` : iso;
+  }
 
   // ---------- Hilfen ----------
   function esc(text) {

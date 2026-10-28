@@ -563,3 +563,32 @@ fieldset.eigenes-foto .klein { margin: 0; }
 fieldset.wert { border: 1px solid var(--linie); border-radius: 10px; padding: 10px 12px 12px; display: grid; gap: 10px; }
 fieldset.wert legend { font-weight: 600; font-size: 0.9rem; padding: 0 4px; }
 fieldset.wert .klein { margin: 0; }
+
+/* Tonie erkennen: Vorschläge, Versionsgruppen, Ergebnis */
+.vorschlaege { display: grid; gap: 12px; margin-top: 12px; }
+.vorschlag { background: var(--flaeche); border-radius: var(--radius); box-shadow: var(--schatten); padding: 12px; display: grid; gap: 8px; }
+.vorschlag.gruppe { border: 2px solid #b9cdea; }
+.vorschlag .titel, .ergebnis .titel { margin: 0; font-size: 1.05rem; }
+.vorschlag .reihe, .ergebnis .reihe { margin: 0; }
+.vorschlag .knopfreihe, .ergebnis .knopfreihe { margin-top: 4px; }
+.gruppe-kopf { margin: 0; }
+.vergleich { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 8px; align-items: start; }
+.eigene-fotos { display: grid; gap: 4px; align-content: start; }
+.eigene-fotos img, .katalog-bild img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #fff; border-radius: 10px; border: 1px solid var(--linie); cursor: zoom-in; }
+.gruppe > .eigene-fotos { grid-template-columns: repeat(3, 72px); }
+/* Zwei Versionen passen am Handy nebeneinander; ab drei wird gewischt */
+.versionen { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(128px, 1fr); gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; }
+.version-spalte { display: grid; gap: 6px; align-content: start; padding: 6px; border-radius: 12px; border: 1px solid var(--linie); scroll-snap-align: start; min-width: 0; }
+.version-spalte .knopf { font-size: 0.88rem; padding: 6px 8px; white-space: normal; text-align: center; }
+.version-spalte.empfohlen { border: 2px solid var(--behalten); background: var(--behalten-hell); }
+.version-spalte .knopf { width: 100%; }
+.urteil { margin: 0; padding: 8px 10px; border-radius: 10px; background: #e8f0fb; color: #1d4f91; }
+.urteil.unsicher { background: var(--verkaufen-hell); color: var(--verkaufen); }
+.urteil-frage { margin: 0; font-weight: 700; }
+.ergebnis { display: grid; gap: 10px; }
+.ergebnis-block { border-top: 1px solid var(--linie); padding-top: 10px; }
+.ergebnis-block h3 { margin: 0 0 4px; font-size: 0.95rem; }
+.ergebnis-block p { margin: 0 0 6px; }
+.klein-knopf { min-height: 36px; padding: 4px 12px; font-size: 0.85rem; }
+.zoom { width: min(96vw, 720px); }
+.zoom img { width: 100%; height: auto; max-height: 75vh; object-fit: contain; background: #fff; border-radius: 10px; }
