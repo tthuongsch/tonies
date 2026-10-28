@@ -1096,16 +1096,52 @@
     return { genau: genau[0] || null, andere: gleich.filter((x) => genau.indexOf(x) < 0) };
   }
 
-  // Quellen für Rarität und Richtwert. Nur hier steht etwas über ToyTales (Link-Aufbau).
+  // Quellen für Rarität und Richtwert. Nur hier steht etwas über ToyTales (Link-Aufbau);
+  // eine spätere Quelle (z. B. Kleinanzeigen) kommt als weiterer Eintrag dazu.
   const Quellen = {
     toytales: {
       name: "ToyTales",
+      // DuckDuckGo: im Test gleich gute Treffer wie Bing, ohne Cookie-Banner (Google zeigte nur Übersichtsseiten)
       suchLink(t) {
         const v = t.version && !/^(original|unbekannt)$/i.test(t.version) ? t.version : "";
-        return "https://www.google.com/search?q=" + encodeURIComponent(`site:toytales.eu ${t.titel} ${t.reihe} ${v}`.replace(/\s+/g, " ").trim());
+        return "https://duckduckgo.com/?q=" + encodeURIComponent(`site:toytales.eu ${t.titel} ${t.reihe} ${v}`.replace(/\s+/g, " ").trim());
+      },
+      // Direktlink aus der Adressliste (Apps Script, nur bei sicherem Treffer)
+      async direktLink(t) {
+        const a = await anfrage("toytales", { titel: t.titel, reihe: t.reihe, kollektion: t.kollektion, format: t.format, version: t.version }, { leise: true });
+        return a.ok ? { url: a.url, sicher: a.sicher } : { url: "", sicher: false, fehler: a.fehler };
       },
     },
   };
+
+  // Knopf "Bei ToyTales prüfen": gespeicherte Wert-Quelle → sicherer Direktlink → Suche.
+  // Erst die Suche als Link, der Direktlink ersetzt sie, sobald er da ist (kein Warten beim Klick).
+  function quelleKnopfHtml(t, gespeichert) {
+    const q = Quellen.toytales;
+    return `<div class="knopfreihe links quelle-knoepfe">
+      <a class="knopf leise" data-quelle-link href="${esc(gespeichert || q.suchLink(t))}" target="_blank" rel="noopener noreferrer">Bei ${q.name} prüfen ↗</a>
+      <a class="knopf leise" data-quelle-vermutung hidden target="_blank" rel="noopener noreferrer">Vermutete Seite ↗</a>
+    </div>
+    <p class="klein" data-quelle-hinweis>${gespeichert ? "Öffnet deine gespeicherte Wert-Quelle." : "Öffnet die Suche auf toytales.eu …"}</p>`;
+  }
+  async function quelleKnopfFuellen(wurzel, t, gespeichert) {
+    if (gespeichert) return;
+    const d = await Quellen.toytales.direktLink(t);
+    const link = wurzel.querySelector("[data-quelle-link]");
+    const hinweis = wurzel.querySelector("[data-quelle-hinweis]");
+    if (!link) return;
+    if (d.url && d.sicher) {
+      link.href = d.url;
+      hinweis.textContent = "Öffnet direkt die passende ToyTales-Seite.";
+    } else if (d.url) {
+      const v = wurzel.querySelector("[data-quelle-vermutung]");
+      v.href = d.url;
+      v.hidden = false;
+      hinweis.textContent = "Keine eindeutige Seite gefunden: Suche öffnen oder die vermutete Seite prüfen.";
+    } else {
+      hinweis.textContent = d.fehler ? `${d.fehler} Der Knopf öffnet die Suche.` : "Keine passende Seite gefunden: Der Knopf öffnet die Suche.";
+    }
+  }
 
   function ergebnisZeigen(roh, versionWahl) {
     const t = Object.assign({}, roh);
@@ -1120,7 +1156,7 @@
       ? `${genau.raritaet ? "★ " + esc(genau.raritaet) : "Rarität: Normal"}${genau.richtwert ? " · Richtwert " + esc(genau.richtwert) + " €" : ""}
          ${genau.wertStand ? `<span class="klein">(von dir übernommen am ${esc(datumKurz(genau.wertStand))})</span>` : `<span class="klein">(noch nicht geprüft)</span>`}`
       : `<span class="klein">Noch nicht geprüft.</span>`;
-    const quelle = genau && genau.wertQuelle ? genau.wertQuelle : Quellen.toytales.suchLink(t);
+    const gespeicherteQuelle = genau && genau.wertQuelle ? genau.wertQuelle : "";
     $("bereich-ergebnis").innerHTML = `<div class="karte-flaeche ergebnis">
       <div class="vergleich">${deineFotos()}<div class="katalog-bild">${zoomBild(bildGross(t.eigenesFoto || t.bild, 600), t.titel)}</div></div>
       <p class="reihe">${esc([t.reihe, t.kollektion].filter(Boolean).join(" · "))}</p>
@@ -1136,7 +1172,7 @@
       <div class="ergebnis-block">
         <h3>Rarität und Richtwert</h3>
         <p>${werte}</p>
-        <div class="knopfreihe links"><a class="knopf leise" href="${esc(quelle)}" target="_blank" rel="noopener noreferrer">Bei ${Quellen.toytales.name} prüfen ↗</a></div>
+        ${quelleKnopfHtml(t, gespeicherteQuelle)}
       </div>
       <div class="knopfreihe">
         ${genau ? `<button type="button" class="knopf" data-ergebnis="erhoehen">Anzahl erhöhen</button>
@@ -1150,6 +1186,7 @@
     </div>`;
     titelSetzen(CHECK);
     zeige("bereich-ergebnis");
+    quelleKnopfFuellen($("bereich-ergebnis"), t, gespeicherteQuelle);
   }
 
   $("bereich-ergebnis").addEventListener("click", (ev) => {

@@ -440,6 +440,7 @@ function doPost(e) {
       case "vorsichten": return alsJson(fotoVorsichten(anfrage));
       case "netz": return alsJson(imNetzSuchen(anfrage));
       case "unterschiede": return alsJson(versionsUnterschiede(anfrage));
+      case "toytales": return alsJson(toytalesLink(anfrage));
       case "eintrag": return alsJson(eintragLesen(anfrage.id));
       case "aendern": return alsJson(aendern(anfrage));
       case "archivieren": return alsJson(archivieren(anfrage));
@@ -1871,4 +1872,98 @@ function versionsUnterschiede(anfrage) {
   } catch (x) {
     return { ok: false, fehler: "Die Antwort ließ sich nicht lesen. Bitte noch einmal versuchen.", budget: budget };
   }
+}
+
+/*
+ * Teil 12: ToyTales-Direktlink
+ *   Es wird nur die öffentliche Adressliste (sitemap) geladen, nie Seiteninhalte.
+ *   Abruf nur bei Nutzung und höchstens alle 7 Tage; die Adressen liegen im
+ *   ausgeblendeten Tab "ToyTales-Adressen". robots.txt erlaubt das (search=yes).
+ *   Ein Direktlink kommt nur bei sicherem Treffer, sonst nimmt die Website die Suche.
+ */
+const TOYTALES_BLATT = "ToyTales-Adressen";
+const TOYTALES_SITEMAP = "https://toytales.eu/sitemap.xml";
+const TOYTALES_MERKEN_MS = 7 * 24 * 60 * 60 * 1000;
+const ZAHLWOERTER = { "1": "eins", "2": "zwei", "3": "drei", "4": "vier", "5": "funf", "6": "sechs", "7": "sieben",
+  "8": "acht", "9": "neun", "10": "zehn", "11": "elf", "12": "zwolf" };
+const VERSIONSWOERTER = ["neuauflage", "relaunch"];
+const FORMWOERTER = ["cuddle", "pluesch", "plusch", "kuschel", "tonie", "tonies", "kreativ"];
+
+/** Wiki-Adressen von ToyTales, gemerkt für 7 Tage. */
+function toytalesAdressen() {
+  const sheet = SpreadsheetApp.getActive();
+  const props = PropertiesService.getScriptProperties();
+  let blatt = sheet.getSheetByName(TOYTALES_BLATT);
+  const stand = parseInt(props.getProperty("toytales_stand") || "0", 10);
+  const alt = blatt && blatt.getLastRow() > 1 ? blatt.getRange(2, 1, blatt.getLastRow() - 1, 1).getValues().map((z) => String(z[0])) : [];
+  if (alt.length && Date.now() - stand < TOYTALES_MERKEN_MS) return alt;
+  try {
+    const locs = (xml) => (String(xml).match(/<loc>[^<]+<\/loc>/g) || []).map((l) => l.slice(5, -6).replace(/&amp;/g, "&"));
+    const holen = (url) => {
+      const a = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { "User-Agent": "Mozilla/5.0 (Tonie-Sammlung)" } });
+      if (a.getResponseCode() !== 200) throw new Error("HTTP " + a.getResponseCode());
+      return a.getContentText();
+    };
+    const karten = locs(holen(TOYTALES_SITEMAP)).filter((u) => /^https:\/\/toytales\.eu\/sitemap-wiki(-page-\d+)?\.xml$/.test(u));
+    const adressen = [];
+    karten.forEach((k) => locs(holen(k)).forEach((u) => { if (/^https:\/\/toytales\.eu\/wiki\/[a-z0-9-]+$/.test(u)) adressen.push(u); }));
+    if (adressen.length < 300) throw new Error(`nur ${adressen.length} Adressen`);
+    if (!blatt) { blatt = sheet.insertSheet(TOYTALES_BLATT); blatt.hideSheet(); }
+    blatt.clearContents();
+    blatt.getRange(1, 1, adressen.length + 1, 1).setValues([["Adresse (nur zum Verlinken, wird alle 7 Tage erneuert)"]].concat(adressen.map((u) => [u])));
+    props.setProperty("toytales_stand", String(Date.now()));
+    return adressen;
+  } catch (x) {
+    console.warn("ToyTales-Adressen nicht erreichbar: " + x.message);
+    return alt; // dann eben die alte Liste (oder keine: die Website nimmt die Suche)
+  }
+}
+
+// Wörter für den Vergleich: Umlaute, "&" und Zahlen vereinheitlichen ("7" = "sieben", "Radfahren" = "rad-fahren").
+function toytalesWoerter(text) {
+  return vereinfachen(String(text || "").replace(/&/g, " und ")).replace(/ss/g, "s")
+    .split(/[^a-z0-9]+/).filter(Boolean).map((w) => ZAHLWOERTER[w] || w);
+}
+
+/**
+ * Sucht die ToyTales-Seite zu einem Tonie. Sicher nur, wenn alle Titelwörter passen,
+ * Version und Bauform (Kuschel ja/nein) stimmen, kaum fremde Wörter dabei sind und
+ * kein zweiter Treffer gleich gut ist.
+ */
+function toytalesZuordnen(t, adressen) {
+  const titel = toytalesWoerter(t.titel);
+  const rest = toytalesWoerter(t.reihe).concat(toytalesWoerter(t.kollektion));
+  if (!titel.length) return { url: "", sicher: false };
+  const v = vereinfachen(t.version);
+  const vWort = /neuauflage/.test(v) ? "neuauflage" : /relaunch/.test(v) ? "relaunch" : "";
+  const kuschel = t.format === "Kuschel-Tonie";
+  const ziel = {};
+  titel.concat(rest).forEach((w) => { ziel[w] = true; });
+  const treffer = [];
+  adressen.forEach((url) => {
+    const m = url.match(/\/wiki\/de-(.+)$/);
+    if (!m) return;
+    const w = toytalesWoerter(m[1].replace(/-/g, " "));
+    const hat = {};
+    w.forEach((x) => { hat[x] = true; });
+    if (!titel.every((x) => hat[x]) && w.join("").indexOf(titel.join("")) < 0) return;
+    if (vWort ? !hat[vWort] : VERSIONSWOERTER.some((x) => hat[x])) return;
+    if (kuschel !== ["cuddle", "pluesch", "plusch", "kuschel"].some((x) => hat[x])) return;
+    const fremd = w.filter((x) => !ziel[x] && VERSIONSWOERTER.indexOf(x) < 0 && FORMWOERTER.indexOf(x) < 0 && !/^\d{4}$/.test(x));
+    const punkte = rest.filter((x, i) => rest.indexOf(x) === i && hat[x]).length * 2 - fremd.length;
+    treffer.push({ url: url, punkte: punkte, fremd: fremd.length });
+  });
+  treffer.sort((a, b) => b.punkte - a.punkte || a.fremd - b.fremd);
+  if (!treffer.length) return { url: "", sicher: false };
+  const sicher = treffer[0].fremd <= 1 && (treffer.length === 1 || treffer[1].punkte < treffer[0].punkte);
+  return { url: treffer[0].url, sicher: sicher };
+}
+
+function toytalesLink(anfrage) {
+  const t = { titel: anfrage.titel, reihe: anfrage.reihe, kollektion: anfrage.kollektion, format: anfrage.format, version: anfrage.version };
+  if (!String(t.titel || "").trim()) return { ok: false, fehler: "Titel fehlt." };
+  const adressen = toytalesAdressen();
+  if (!adressen.length) return { ok: false, code: "nicht-erreichbar", fehler: "Die Adressliste von ToyTales ist gerade nicht erreichbar." };
+  const z = toytalesZuordnen(t, adressen);
+  return { ok: true, url: z.url, sicher: z.sicher };
 }
