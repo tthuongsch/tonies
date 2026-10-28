@@ -1,14 +1,15 @@
 // Baut aus der Tonie-Liste die Karten, die Ansichten und die Zähler.
 (function () {
   const ANSICHTEN = ["alle", "behalten", "verkaufen", "verliehen"];
-  const FILTER = ["reihe", "format", "inhalt", "thema", "zustand", "raritaet", "version", "geprueft"];
+  const FILTER = ["reihe", "format", "inhalt", "thema", "zustand", "raritaet", "version", "geprueft", "preis"];
+  const WERT_GUELTIG_TAGE = 30; // wie WERT_GUELTIG_TAGE im Apps Script
   const TESTMODUS = /testmodus/.test(location.search) ? "&testmodus" : ""; // nur lokal
 
   const zustand = {
     tonies: [],
     ansicht: "alle",
     suche: "",
-    filter: { reihe: "", format: "", inhalt: "", thema: "", zustand: "", raritaet: "", version: "", geprueft: "" },
+    filter: { reihe: "", format: "", inhalt: "", thema: "", zustand: "", raritaet: "", version: "", geprueft: "", preis: "" },
     sortierung: "titel",
     entsperrt: false, // mit PIN oder Passwort: private Felder sichtbar
   };
@@ -112,7 +113,14 @@
     if (feld === "raritaet") return [t.raritaet || "Normal"];
     if (feld === "version") return t.version ? [versionText(t.version)] : [];
     // "Geprüft" heißt: Wert-Stand ist gefüllt. Der ist privat, also nur entsperrt filterbar.
-    if (feld === "geprueft") return zustand.entsperrt ? [t.wertStand ? "Geprüft" : "Noch nicht geprüft"] : [];
+    if (feld === "geprueft") {
+      if (!zustand.entsperrt) return [];
+      if (!t.wertStand) return ["Noch nicht geprüft"];
+      const alt = (Date.now() - new Date(t.wertStand + "T12:00:00")) / 86400000 >= WERT_GUELTIG_TAGE;
+      return [alt ? "Veraltet (älter als 30 Tage)" : "Geprüft"];
+    }
+    // Preis ist privat: nur entsperrt filterbar
+    if (feld === "preis") return zustand.entsperrt ? [t.preis !== null ? "Preis vorhanden" : "Preis offen"] : [];
     return String(t[feld] || "").split(",").map((w) => w.trim()).filter(Boolean);
   };
 
@@ -245,7 +253,7 @@
   }
 
   const FILTER_NAMEN = { reihe: "Reihe", format: "Format", inhalt: "Inhalt", thema: "Thema", zustand: "Zustand", raritaet: "Rarität",
-    version: "Version", geprueft: "Geprüft" };
+    version: "Version", geprueft: "Wert", preis: "Preis" };
 
   // Tonies nach Ansicht, Filtern und Suche; mit Suchtext die besten Treffer zuerst,
   // außer es ist bewusst eine andere Sortierung als "A–Z Titel" gewählt.
@@ -385,6 +393,15 @@
       <li><strong>Bild antippen</strong> öffnet „Tonie verwalten“ (nur mit Passwort).</li></ul>`],
   };
   el.menue.addEventListener("click", (ev) => {
+    // "Sammlung prüfen" arbeitet in der Reihenfolge und mit den Filtern der aktuellen Übersicht
+    if (ev.target.closest('a[href*="pruefen"]')) {
+      try {
+        sessionStorage.setItem("tonie-pruefen-reihenfolge", JSON.stringify(sichtbareTonies(zustand.filter).map((t) => t.id).filter(Boolean)));
+        sessionStorage.setItem("tonie-pruefen-durchgang", "0");
+        sessionStorage.removeItem("tonie-pruefen-uebersprungen");
+      } catch (x) {}
+      uebersichtMerken();
+    }
     const k = ev.target.closest("[data-info]");
     if (!k) return;
     const [titel, text] = INFOS[k.dataset.info];

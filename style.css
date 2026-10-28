@@ -618,3 +618,30 @@ fieldset.wert .klein { margin: 0; }
 .pruefen-kopf { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: start; }
 .pruefen-kopf .titel { margin: 0; font-size: 1.05rem; }
 .pruefen-kopf .reihe, .pruefen-kopf .klein { margin: 0; }
+
+/* Wert ermitteln */
+.wert { display: grid; gap: 10px; }
+.wert h3 { margin: 10px 0 0; font-size: 1rem; border-top: 1px solid var(--linie); padding-top: 12px; }
+.wert-befund { padding: 10px; border-radius: 10px; background: var(--hintergrund); display: grid; gap: 4px; }
+.wert-befund p { margin: 0; }
+.quelle-angabe { margin: 0; }
+.kh-umschlag summary { cursor: pointer; font-weight: 600; color: var(--akzent); min-height: 32px; }
+.anzeigen-eingabe { display: grid; gap: 8px; padding: 10px; border: 1px dashed var(--linie); border-radius: 10px; }
+.anzeigen-eingabe textarea { width: 100%; font: inherit; font-size: 16px; padding: 8px 10px; border: 1px solid var(--linie); border-radius: 8px; }
+.anzeigen-eingabe .foto-vorschau img { width: 72px; height: 72px; }
+.tabelle-rahmen { overflow-x: auto; }
+table.anzeigen { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+table.anzeigen th, table.anzeigen td { padding: 6px 4px; border-bottom: 1px solid var(--linie); text-align: left; vertical-align: top; }
+table.anzeigen input[data-anz="preis"] { width: 64px; font: inherit; font-size: 16px; padding: 4px 6px; border: 1px solid var(--linie); border-radius: 6px; }
+table.anzeigen input[type="checkbox"] { width: 22px; height: 22px; }
+table.anzeigen tr.aus td { color: var(--leise); }
+.klein-weg { position: static; width: 32px; height: 32px; font-size: 1.1rem; box-shadow: none; }
+.wert-statistik { display: grid; gap: 2px; }
+.wert-statistik p { margin: 0; }
+.preis-zeile { display: grid; gap: 6px; }
+.preis-zeile input { font: inherit; font-size: 16px; padding: 8px 10px; border: 1px solid var(--linie); border-radius: 8px; }
+.wert [data-wert-feld] { width: 100%; font: inherit; font-size: 16px; padding: 8px 10px; border: 1px solid var(--linie); border-radius: 8px; background: var(--flaeche); }
+.wert label { font-weight: 600; font-size: 0.85rem; display: block; margin-bottom: 2px; }
+#preis-historie ul { margin: 4px 0 0; padding-left: 18px; }
+.kh-umschlag .kopierhilfe { border-top: 0; padding-top: 0; }
+.kh-umschlag .kopierhilfe > label { display: none; }

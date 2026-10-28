@@ -12,7 +12,7 @@
     ziel: null,        // vorhandener Eintrag beim Ergänzen
   };
 
-  const BEREICHE = ["bereich-sperre", "bereich-start", "bereich-formular", "bereich-ergebnis", "bereich-weiter", "bereich-pruefen"];
+  const BEREICHE = ["bereich-sperre", "bereich-start", "bereich-formular", "bereich-ergebnis", "bereich-weiter", "bereich-pruefen", "bereich-wert"];
   const VERWALTEN_ID = new URLSearchParams(location.search).get("id");
   // Ein Bereich "Tonie-Check": Foto, Name oder von Hand; danach prüfen oder hinzufügen.
   // Alte Adressen mit ?erkennen öffnen ihn mit dem Reiter Foto.
@@ -457,6 +457,12 @@
     if (aktion === "ergaenzen") ergaenzenModus(zustand.vorhanden);
     if (aktion === "auslesen") auslesen();
     if (aktion === "zur-sammlung") zurueckZurSammlung();
+    if (aktion === "wert-ergebnis") {
+      const { t, genau } = zustand.ergebnis;
+      // Schon in der Sammlung: mit dessen Werten und ID (dann wird direkt gespeichert)
+      wertAssistent(genau ? Object.assign({}, genau) : Object.assign({}, t, { id: "" }), "ergebnis");
+    }
+    if (aktion === "wert-verwalten") wertAssistent(Object.assign({}, zustand.eintrag), "verwalten");
     if (aktion === "naechster-tonie" || aktion === "naechsten-erkennen") naechsteErkennung();
     if (aktion === "version-alt") { $("f-version").value = "Original"; versionFrage(); }
     if (aktion === "netz-text") netzSuchenText();
@@ -504,6 +510,8 @@
 
   function formularOeffnen(felder, vorhanden) {
     nurLesen(false);
+    $("wert-einstieg").hidden = true;
+    $("preis-historie").hidden = true;
     zustand.ausErkennen = false;
     zustand.andereVersion = false;
     zustand.modus = "neu";
@@ -530,6 +538,8 @@
     zustand.modus = "verwalten";
     zustand.eintrag = e;
     modusAnzeigen();
+    $("wert-einstieg").hidden = !zustand.zugang;
+    preisHistorie(e);
     ["behalten", "verkaufen"].forEach((art) => {
       $("h-" + art).checked = e[art] > 0;
       $("f-" + art).value = e[art] > 0 ? e[art] : 1;
@@ -1169,6 +1179,7 @@
         <h3>Rarität und Richtwert</h3>
         <p data-werte>${werte}</p>
         ${quelleKnopfHtml(t, gespeicherteQuelle)}
+        <div class="knopfreihe links"><button type="button" class="knopf" data-aktion="wert-ergebnis">Wert ermitteln (ToyTales + Kleinanzeigen)</button></div>
         ${kopierhilfeHtml()}
       </div>
       <div class="knopfreihe">
@@ -1247,7 +1258,7 @@
     if (e.richtwert) teile.push(`gebraucht ${esc(e.richtwert)} €`);
     if (e.richtwertOvp) teile.push(`OVP ${esc(e.richtwertOvp)} €`);
     return teile.join(" · ") + (e.wertStand ? ` <span class="klein">(von dir übernommen am ${esc(datumKurz(e.wertStand))})</span>`
-      : ` <span class="klein">(noch nicht geprüft)</span>`);
+      : ` <span class="klein">(noch nicht geprüft)</span>`) + (/toytales\.eu/.test(e.wertQuelle || "") ? quellenAngabe(e.wertQuelle) : "");
   }
 
   function kopierhilfeHtml() {
@@ -1296,13 +1307,11 @@
         <div><label>Wert-Quelle</label><input data-kh-feld="wertQuelle" type="url" value="${esc(befund.quelle)}" placeholder="https://toytales.eu/wiki/…"></div>
       </div>
       <details class="klein"><summary>Woher die Zahlen kommen</summary><ul>${befund.belege.map((b) => `<li>${esc(b)}</li>`).join("")}</ul></details>
-      ${box.closest("#bereich-pruefen") ? `<div class="knopfreihe">
-        <button type="button" class="knopf leise" data-kh="ueberspringen">Überspringen</button>
-        <button type="button" class="knopf" data-kh="uebernehmen">Speichern und weiter</button>
-      </div>` : `<div class="knopfreihe links">
+      ${befund.quelle && /toytales\.eu/.test(befund.quelle) ? quellenAngabe(befund.quelle) : ""}
+      <div class="knopfreihe links">
         <button type="button" class="knopf" data-kh="uebernehmen">Übernehmen</button>
         <button type="button" class="knopf leise" data-kh="verwerfen">Verwerfen</button>
-      </div>`}`;
+      </div>`;
   }
   function khMeldung(box, text, art) {
     const m = box.querySelector("[data-kh-meldung]");
@@ -1312,7 +1321,7 @@
   }
   // Zu welchem Tonie gehört die Kopierhilfe gerade? Ergebnisansicht oder Formular
   function khTonie(box) {
-    if (box.closest("#bereich-pruefen")) return zustand.pruefTonie;
+    if (box.closest("#bereich-wert")) return zustand.wert.t;
     return box.closest("#bereich-ergebnis") ? zustand.ergebnis.t : formularWerte();
   }
   function khText(box) {
@@ -1329,7 +1338,8 @@
     const feld = (f) => box.querySelector(`[data-kh-feld="${f}"]`).value.trim();
     const w = { raritaet: feld("raritaet"), richtwert: feld("richtwert"), richtwertOvp: feld("richtwertOvp"),
       wertQuelle: feld("wertQuelle"), wertStand: heuteBerlin() };
-    if (box.closest("#bereich-pruefen")) return pruefenSpeichern(box, w);
+    if (box.closest("#bereich-wert")) return wertToytalesSetzen({ raritaet: w.raritaet, gebraucht: w.richtwert, ovp: w.richtwertOvp,
+      quelle: w.wertQuelle, belege: (box.befund && box.befund.belege) || [], von: "eingefügt" });
     const imErgebnis = !!box.closest("#bereich-ergebnis");
     if (!imErgebnis) {
       werteInsFormular(w);
@@ -1378,7 +1388,7 @@
     }
     if (k.dataset.kh === "verwerfen") { box.querySelector("[data-kh-ergebnis]").hidden = true; box.querySelector("[data-kh-text]").value = ""; }
     if (k.dataset.kh === "uebernehmen") khUebernehmen(box);
-    if (k.dataset.kh === "ueberspringen") pruefenUeberspringen();
+
   });
   document.addEventListener("change", async (ev) => {
     const inp = ev.target.closest("[data-kh-bild]");
@@ -1401,77 +1411,366 @@
     }
   });
 
-  // ---------- Sammlung prüfen: der Reihe nach Rarität und Richtwert nachtragen ----------
-  // Es wird nichts automatisch geprüft: Du öffnest ToyTales, fügst ein und speicherst, Tonie für Tonie.
-  // "Geprüft" = Wert-Stand gefüllt. Übersprungene kommen in diesem Tab nicht wieder, beim nächsten Mal schon.
-  const UEBERSPRUNGEN = "tonie-pruefen-uebersprungen";
-  function uebersprungen() {
-    try { return JSON.parse(sessionStorage.getItem(UEBERSPRUNGEN)) || []; } catch (x) { return []; }
+  // Letzte Preisprüfungen (privat, nur mit Passwort) in "Tonie verwalten"
+  async function preisHistorie(e) {
+    if (!zustand.zugang || !e.id) return;
+    const a = await anfrage("preispruefungen", { id: e.id }, { leise: true, ohneSperre: true });
+    if (!a.ok || !a.zeilen.length || !zustand.eintrag || zustand.eintrag.id !== e.id) return;
+    const tage = {};
+    a.zeilen.forEach((z) => { (tage[z.datum] = tage[z.datum] || []).push(z); });
+    $("preis-historie").innerHTML = "<strong>Letzte Preisprüfungen</strong><ul>" + Object.keys(tage).slice(0, 5).map((d) => {
+      const auf = tage[d].filter((z) => z.aufgenommen).map((z) => z.preis);
+      const s = Quellen.statistik(auf);
+      return `<li>${esc(datumKurz(d))}: ${tage[d].length} Anzeigen, ${auf.length} aufgenommen${s.anzahl ? ` · Median ${euroText(s.median)}` : ""}</li>`;
+    }).join("") + "</ul>";
+    $("preis-historie").hidden = false;
   }
-  const nachReihe = (a, b) => a.reihe.localeCompare(b.reihe, "de") || a.titel.localeCompare(b.titel, "de");
 
-  function pruefenZeigen() {
+  // ---------- Wert ermitteln: ein Bildschirm, zwei Quellen (ToyTales und Kleinanzeigen) ----------
+  // ToyTales: Einzelabruf für genau diesen Tonie (wenn Zugang eingetragen), sonst Kopierhilfe.
+  // Kleinanzeigen: nur Suchlink; ausgewertet werden ausschließlich deine Screenshots oder dein Text.
+  // Am Ende stehen ein Richtwert gebraucht und ein Richtwert OVP, beide überschreibbar.
+  const MAX_ANZEIGEN_BILDER = 8;
+  zustand.wert = null;
+
+  const quellenAngabe = (url) => /^https:\/\/toytales\.eu\//.test(url || "")
+    ? `<p class="klein quelle-angabe">Quelle: <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">ToyTales.eu ↗</a></p>` : "";
+  const euroText = (n) => Number.isFinite(n) ? n.toLocaleString("de-DE", { maximumFractionDigits: 2 }) + " €" : "–";
+
+  async function wertAssistent(t, herkunft) {
+    zustand.wert = { t, herkunft, tt: null, link: t.wertQuelle && /toytales\.eu\/wiki\//.test(t.wertQuelle) ? t.wertQuelle : "",
+      kandidaten: [], anzeigen: [], ohneVersand: 0, bilder: [], status: null, geaendert: {}, preis: "" };
+    titelSetzen("Wert ermitteln");
+    wertZeichnen();
+    zeige("bereich-wert");
+    const [st, link] = await Promise.all([
+      anfrage("wertstatus", {}, { leise: true }),
+      zustand.wert.link ? Promise.resolve(null) : anfrage("toytales", { titel: t.titel, reihe: t.reihe, kollektion: t.kollektion, format: t.format, version: t.version }, { leise: true }),
+    ]);
+    if (!zustand.wert || zustand.wert.t !== t) return;
+    zustand.wert.status = st.ok ? st.status : null;
+    if (link && link.ok) {
+      if (link.sicher) zustand.wert.link = link.url;
+      else zustand.wert.kandidaten = link.kandidaten || [];
+    }
+    wertZeichnen();
+  }
+
+  function wertToytalesSetzen(tt) {
+    zustand.wert.tt = tt;
+    if (tt.quelle && /toytales\.eu\/wiki\//.test(tt.quelle)) zustand.wert.link = tt.quelle;
+    wertZeichnen();
+  }
+
+  // Anzeigen-Tabelle → Statistik je Zustand (nur aufgenommene, nur mit Versand – die anderen kommen gar nicht an)
+  function anzeigenStatistik() {
+    const auf = zustand.wert.anzeigen.filter((a) => a.aufnehmen && a.art !== "verkauft");
+    const ovp = auf.filter((a) => Quellen.istOvpZustand(a.zustand)).map((a) => a.preis);
+    const gebr = auf.filter((a) => !Quellen.istOvpZustand(a.zustand)).map((a) => a.preis);
+    const verkauft = zustand.wert.anzeigen.filter((a) => a.aufnehmen && a.art === "verkauft").map((a) => a.preis);
+    return { gebraucht: Quellen.statistik(gebr), ovp: Quellen.statistik(ovp), verkauft: Quellen.statistik(verkauft), alle: Quellen.statistik(auf.map((a) => a.preis)) };
+  }
+
+  function wertVorschlag() {
+    const w = zustand.wert, st = anzeigenStatistik();
+    return {
+      raritaet: (w.tt && w.tt.raritaet) || w.t.raritaet || "Normal",
+      richtwert: Quellen.vorschlag(w.tt && w.tt.gebraucht, st.gebraucht.median),
+      richtwertOvp: Quellen.vorschlag(w.tt && w.tt.ovp, st.ovp.median),
+      wertQuelle: w.link || (w.anzeigen.some((a) => a.aufnehmen) ? "Kleinanzeigen" : "eigene Eingabe"),
+    };
+  }
+
+  function statistikHtml(name, s) {
+    if (!s.anzahl) return `<p class="klein">${name}: keine Werte.</p>`;
+    return `<p class="klein"><strong>${name}:</strong> ${s.anzahl} Anzeige${s.anzahl === 1 ? "" : "n"} · Median ${euroText(s.median)} ·
+      ${euroText(s.min)} bis ${euroText(s.max)} · Spanne ${esc(s.spanne)} €</p>`;
+  }
+
+  function wertZeichnen() {
+    const w = zustand.wert;
+    if (!w) return;
+    const t = w.t, st = w.status, vor = wertVorschlag(), a = anzeigenStatistik();
+    const frisch = t.wertStand && st && (Date.now() - new Date(t.wertStand + "T12:00:00")) / 86400000 < st.gueltigTage;
+    const passend = w.anzeigen.filter((x) => x.passt === "ja").length;
+    const nein = w.anzeigen.filter((x) => x.passt === "nein").length;
+    const feld = (f, label, privat) => `<div${privat ? ' class="privat"' : ""}><label>${label}</label>
+      <input data-wert-feld="${f}" inputmode="${f === "wertQuelle" ? "text" : "decimal"}" value="${esc(w.geaendert[f] !== undefined ? w.geaendert[f] : vor[f])}"></div>`;
+    const ttTeil = w.tt
+      ? `<div class="wert-befund">
+          <p><strong>${w.tt.von === "abgerufen" ? "Von ToyTales abgerufen" : "Von ToyTales eingefügt"}</strong></p>
+          <p>Rarität: ${esc(w.tt.raritaet || "–")} · gebraucht ${esc(w.tt.gebraucht || "–")} € · OVP ${esc(w.tt.ovp || "–")} €</p>
+          ${quellenAngabe(w.link)}
+          <details class="klein"><summary>Woher die Zahlen kommen</summary><ul>${(w.tt.belege || []).map((b) => `<li>${esc(b)}</li>`).join("")}</ul></details>
+        </div>` : "";
+    const linkTeil = w.link
+      ? `<div class="knopfreihe links"><a class="knopf leise" href="${esc(w.link)}" target="_blank" rel="noopener noreferrer">ToyTales öffnen ↗</a>
+          ${st && st.auto && st.zugang ? (frisch && !w.neu
+            ? `<button type="button" class="knopf" data-wert="neu-frage">Trotzdem neu laden</button>`
+            : `<button type="button" class="knopf" data-wert="abrufen">Wert ermitteln (ToyTales)</button>`) : ""}</div>
+        ${frisch ? `<p class="klein">Gespeichert am ${esc(datumKurz(t.wertStand))}: ${wertText(t)}. Neu abgerufen wird frühestens nach ${st.gueltigTage} Tagen.</p>` : ""}
+        <div data-wert-warnung hidden class="vorhanden"><p>ToyTales bittet, den Server nicht unnötig zu belasten. Der Wert ist erst ${Math.round((Date.now() - new Date(t.wertStand + "T12:00:00")) / 86400000)} Tage alt. Trotzdem neu laden?</p>
+          <div class="knopfreihe"><button type="button" class="knopf leise" data-wert="neu-nein">Nein</button><button type="button" class="knopf" data-wert="neu-ja">Ja, neu laden</button></div></div>`
+      : w.kandidaten.length
+        ? `<p class="klein">Keine eindeutige Seite. Welche ist deine Version?</p>
+           <div class="knopfreihe links">${w.kandidaten.map((k, i) => `<button type="button" class="knopf leise" data-wert="kandidat" data-i="${i}">${esc(versionText(k.version))} · ${esc(k.url.replace("https://toytales.eu/wiki/", ""))}</button>`).join("")}</div>`
+        : `<div class="knopfreihe links"><a class="knopf leise" href="${esc(Quellen.toytales.suchLink(t))}" target="_blank" rel="noopener noreferrer">Auf ToyTales suchen ↗</a></div>`;
+    const zeilen = w.anzeigen.map((x, i) => `<tr class="${x.aufnehmen ? "" : "aus"}">
+        <td>${x.bild || "–"}</td><td>${esc(x.titel)}${x.grund && x.passt !== "ja" ? `<br><span class="klein">${esc(x.grund)}</span>` : ""}</td>
+        <td><input data-anz="preis" data-i="${i}" inputmode="decimal" value="${esc(String(x.preis).replace(".", ","))}" aria-label="Preis"></td>
+        <td>${x.art === "verkauft" ? "verkauft" : "Angebot"}</td><td>${esc(x.passt)}</td><td>${esc(x.zustand || "–")}</td>
+        <td><input type="checkbox" data-anz="auf" data-i="${i}"${x.aufnehmen ? " checked" : ""} aria-label="aufnehmen"></td>
+        <td><button type="button" class="foto-weg klein-weg" data-anz="weg" data-i="${i}" aria-label="Zeile löschen">×</button></td></tr>`).join("");
+    $("bereich-wert").innerHTML = `<div class="karte-flaeche wert">
+      ${w.herkunft === "pruefen" ? pruefFortschritt() : ""}
+      <div class="pruefen-kopf">
+        <div class="katalog-bild">${zoomBild(bildGross(t.eigenesFoto || t.bild, 400), t.titel)}</div>
+        <div><p class="reihe">${esc([t.reihe, t.kollektion].filter(Boolean).join(" · "))}</p><h2 class="titel">${esc(t.titel)}</h2>
+          <div class="marken">${t.version ? versionMarke(t.version) : ""}</div></div>
+      </div>
+
+      <h3>1. ToyTales: Rarität und Richtwert</h3>
+      ${linkTeil}
+      <p class="meldung" data-wert-meldung="tt" hidden></p>
+      ${ttTeil}
+      <details class="kh-umschlag"${w.tt ? "" : " open"}><summary>Text oder Screenshot von ToyTales einfügen</summary>${kopierhilfeHtml()}</details>
+
+      <h3>2. Kleinanzeigen: Angebote</h3>
+      <div class="knopfreihe links"><a class="knopf leise" href="${esc(Quellen.kleinanzeigen.suchLink(t))}" target="_blank" rel="noopener noreferrer">Bei Kleinanzeigen suchen ↗</a></div>
+      ${Quellen.kleinanzeigen.versandImLink ? "" : `<p class="klein">Bitte dort den Filter <strong>„Versand möglich“</strong> anklicken, dann Screenshots der Liste machen.</p>`}
+      <div class="anzeigen-eingabe" data-ablage>
+        <label class="knopf leise">Screenshots wählen<input type="file" accept="image/*" multiple data-anz-bilder hidden></label>
+        <span class="klein">bis ${MAX_ANZEIGEN_BILDER} pro Durchgang · hierher ziehen geht auch</span>
+        <ul class="foto-vorschau">${w.bilder.map((b, i) => `<li><img src="${b}" alt="Screenshot ${i + 1}"><button type="button" class="foto-weg" data-anz="bild-weg" data-i="${i}" aria-label="Screenshot ${i + 1} entfernen">×</button></li>`).join("")}</ul>
+        <textarea data-anz-text rows="2" placeholder="… oder Text der Anzeigenliste einfügen"></textarea>
+        <div class="knopfreihe links"><button type="button" class="knopf" data-wert="anzeigen">${w.anzeigen.length ? "Mehr Anzeigen hinzufügen" : "Anzeigen auswerten"}</button>
+          <span class="klein">ca. 0,3–0,8 Cent${st ? ` · Budget: ${(st.budget.verbrauchtUsd * 100).toFixed(2).replace(".", ",")} Cent von ${st.budget.budgetUsd} $` : ""}</span></div>
+      </div>
+      <p class="meldung" data-wert-meldung="anz" hidden></p>
+      ${w.anzeigen.length || w.ohneVersand ? `<p class="klein"><strong>${passend} passende Anzeigen mit Versand</strong>, Ziel mindestens 8${w.ohneVersand ? ` · ${w.ohneVersand} Anzeigen ohne Versand ausgeblendet` : ""}</p>` : ""}
+      ${w.anzeigen.length && (passend < 5 || nein > w.anzeigen.length / 2)
+        ? `<p class="klein warnung-text">Noch zu wenig passende Anzeigen. Tipp: Seite 2 öffnen oder weiter nach unten scrollen, Screenshot machen und „Mehr Anzeigen hinzufügen“.</p>` : ""}
+      ${w.anzeigen.length ? `<div class="tabelle-rahmen"><table class="anzeigen"><thead><tr><th>Bild</th><th>Titel</th><th>Preis €</th><th>Art</th><th>Passt</th><th>Zustand</th><th>auf&shy;nehmen</th><th></th></tr></thead>
+        <tbody>${zeilen}</tbody></table></div>` : ""}
+      <button type="button" class="knopf leise" data-wert="zeile">+ Eigene Zeile</button>
+      ${w.anzeigen.length ? `<div class="wert-statistik">
+        <p class="klein warnung-text">Das sind Angebotspreise, keine bezahlten Preise. Tatsächlich erzielte Preise liegen meist darunter.</p>
+        ${statistikHtml("Gebraucht", a.gebraucht)}${statistikHtml("OVP/neu", a.ovp)}
+        ${a.verkauft.anzahl ? statistikHtml("Als verkauft markiert", a.verkauft) : ""}
+        ${a.alle.anzahl < 3 ? `<p class="klein warnung-text">Zu wenig Daten, Ergebnis unsicher.</p>` : ""}
+      </div>` : ""}
+
+      <h3>3. Ergebnis</h3>
+      <div class="zweispaltig">
+        <div><label>Rarität</label><select data-wert-feld="raritaet">${["Normal", "Selten", "Rarität", "Munkelität"].map((r) =>
+          `<option${r === (w.geaendert.raritaet !== undefined ? w.geaendert.raritaet : vor.raritaet) ? " selected" : ""}>${r}</option>`).join("")}</select></div>
+        ${feld("wertQuelle", "Wert-Quelle")}
+        ${feld("richtwert", "Richtwert gebraucht (€)", true)}
+        ${feld("richtwertOvp", "Richtwert OVP (€)", true)}
+      </div>
+      <div class="preis-zeile privat"><label>Preis (€, dein Verkaufspreis)</label>
+        <input data-wert-feld="preis" inputmode="decimal" value="${esc(w.geaendert.preis !== undefined ? w.geaendert.preis : (t.preis !== null && t.preis !== undefined && t.preis !== "" ? preisText(t.preis) : ""))}">
+        <button type="button" class="knopf leise klein-knopf" data-wert="preis">Richtwert als Preis übernehmen</button></div>
+      <p class="meldung" data-wert-meldung="speichern" hidden></p>
+      <div class="knopfreihe">
+        ${w.herkunft === "pruefen" ? `<button type="button" class="knopf leise" data-wert="ueberspringen">Überspringen</button>`
+          : `<button type="button" class="knopf leise" data-wert="zurueck">Zurück</button>`}
+        <button type="button" class="knopf" data-wert="speichern">${w.herkunft === "pruefen" ? "Speichern und weiter" : "Speichern"}</button>
+      </div>
+    </div>`;
+  }
+
+  function wertMeldung(wo, text, art) {
+    const m = $("bereich-wert").querySelector(`[data-wert-meldung="${wo}"]`);
+    if (!m) return;
+    m.hidden = !text; m.textContent = text || ""; m.dataset.art = art || "fehler";
+  }
+
+  async function toytalesAbrufen(neuLaden) {
+    const w = zustand.wert;
+    wertMeldung("tt", "Frage ToyTales für genau diesen Tonie …", "hinweis");
+    const a = await anfrage("toytaleswert", { id: w.t.id || "", url: w.link, neuLaden: !!neuLaden });
+    if (a.status) w.status = a.status;
+    if (!a.ok) { wertZeichnen(); return wertMeldung("tt", a.fehler + (a.status ? ` (${a.status.heute} von ${a.status.tageslimit} Abrufen heute)` : "")); }
+    if (a.gespeichert) { wertZeichnen(); return wertMeldung("tt", "Gespeicherter Wert ist noch aktuell – kein neuer Abruf nötig.", "hinweis"); }
+    const b = Quellen.toytales.ausBild(a.werte);
+    wertToytalesSetzen({ raritaet: b.raritaet, gebraucht: b.gebraucht, ovp: b.ovp, quelle: a.link, belege: b.belege, von: "abgerufen" });
+    wertMeldung("tt", `Abgerufen (${a.status.heute} von ${a.status.tageslimit} heute).`, "ok");
+  }
+
+  async function anzeigenAuswerten() {
+    const w = zustand.wert, box = $("bereich-wert");
+    const text = box.querySelector("[data-anz-text]").value.trim();
+    if (!w.bilder.length && !text) return wertMeldung("anz", "Bitte Screenshots wählen oder Text einfügen.");
+    wertMeldung("anz", "Anzeigen werden ausgewertet …", "hinweis");
+    const a = await anfrage("anzeigen", { bilder: w.bilder, text, titel: w.t.titel, reihe: w.t.reihe, version: w.t.version });
+    budgetZeigen(a.budget);
+    if (!a.ok) return wertMeldung("anz", a.fehler);
+    // Doppelte (gleicher Titel und Preis) nur einmal
+    const schluessel = (x) => vereinfachen(x.titel).replace(/[^a-z0-9]/g, "") + "|" + x.preis;
+    const vorhanden = new Set(w.anzeigen.map(schluessel));
+    let neu = 0, doppelt = 0;
+    a.anzeigen.forEach((x) => {
+      if (vorhanden.has(schluessel(x))) { doppelt++; return; }
+      vorhanden.add(schluessel(x));
+      w.anzeigen.push(Object.assign({}, x, { aufnehmen: x.passt === "ja", plattform: "Kleinanzeigen" }));
+      neu++;
+    });
+    w.ohneVersand += a.ohneVersand || 0;
+    w.bilder = [];
+    wertZeichnen();
+    wertMeldung("anz", a.nichts && !neu ? "Nichts erkannt: In diesem Material habe ich keine verwertbaren Anzeigen mit Versand gefunden."
+      : `${neu} neue Anzeige${neu === 1 ? "" : "n"}${doppelt ? `, ${doppelt} doppelt (nur einmal gezählt)` : ""}.`, neu ? "ok" : "hinweis");
+  }
+
+  async function anzeigenBilderDazu(dateien) {
+    const w = zustand.wert;
+    for (const d of Array.from(dateien)) {
+      if (!/^image\//.test(d.type)) continue;
+      if (w.bilder.length >= MAX_ANZEIGEN_BILDER) { wertMeldung("anz", `Höchstens ${MAX_ANZEIGEN_BILDER} Screenshots pro Durchgang.`, "hinweis"); break; }
+      try { w.bilder.push(await fotoVerkleinern(d, 1600)); } catch (x) { wertMeldung("anz", "Ein Bild ließ sich nicht lesen."); }
+    }
+    wertZeichnen();
+  }
+
+  async function wertSpeichern() {
+    const w = zustand.wert, box = $("bereich-wert");
+    const f = (n) => { const e = box.querySelector(`[data-wert-feld="${n}"]`); return e ? e.value.trim() : ""; };
+    const werte = { raritaet: f("raritaet"), richtwert: f("richtwert"), richtwertOvp: f("richtwertOvp"), wertQuelle: f("wertQuelle"),
+      wertStand: heuteBerlin(), version: w.t.version || "" };
+    if (f("preis")) werte.preis = f("preis");
+    const zeilen = w.anzeigen.map((x) => ({ plattform: "Kleinanzeigen", titel: x.titel, preis: x.preis, art: x.art, passt: x.passt, aufgenommen: x.aufnehmen }));
+    // Noch nicht in der Sammlung (aus dem Tonie-Check): Werte für "Zur Sammlung hinzufügen" merken
+    if (!w.t.id) {
+      zustand.ergebnis.werte = werte;
+      zeige("bereich-ergebnis");
+      $("bereich-ergebnis").querySelector("[data-werte]").innerHTML = wertText(werte) + ` <span class="klein">– wird beim Hinzufügen gespeichert</span>`;
+      return;
+    }
+    const felder = Object.assign({}, w.t, werte);
+    delete felder.pruefen;
+    const a = await anfrage("aendern", { id: w.t.id, stand: w.t.geaendertAm, felder });
+    if (!a.ok) return wertMeldung("speichern", a.code === "konflikt" ? "Dieser Tonie wurde inzwischen geändert. Bitte neu laden." : a.fehler);
+    Object.assign(w.t, a.eintrag);
+    if (zeilen.length) await anfrage("preispruefung", { id: w.t.id, zeilen }, { leise: true });
+    if (w.herkunft === "pruefen") return pruefenWeiter(true);
+    zurueckZurSammlung(`„${w.t.titel}“: Wert gespeichert`);
+  }
+
+  // Eingaben in der Tabelle: sofort neu rechnen
+  $("bereich-wert").addEventListener("input", (ev) => {
+    const w = zustand.wert;
+    const e = ev.target;
+    if (e.dataset.wertFeld) { w.geaendert[e.dataset.wertFeld] = e.value; return; }
+    if (e.dataset.anz === "preis") {
+      const n = parseFloat(e.value.replace(",", "."));
+      if (Number.isFinite(n) && n > 0) { w.anzeigen[+e.dataset.i].preis = n; clearTimeout(w.timer); w.timer = setTimeout(wertNeuRechnen, 400); }
+    }
+  });
+  $("bereich-wert").addEventListener("change", (ev) => {
+    const e = ev.target, w = zustand.wert;
+    if (e.dataset.anz === "auf") { w.anzeigen[+e.dataset.i].aufnehmen = e.checked; wertNeuRechnen(); }
+    if (e.dataset.wertFeld) w.geaendert[e.dataset.wertFeld] = e.value;
+    if (e.matches("[data-anz-bilder]")) { anzeigenBilderDazu(e.files); e.value = ""; }
+  });
+  // Neu rechnen, ohne dass der Cursor im gerade bearbeiteten Feld verloren geht
+  function wertNeuRechnen() {
+    const fokus = document.activeElement;
+    const merk = fokus && fokus.dataset && fokus.dataset.anz === "preis" ? { i: fokus.dataset.i, pos: fokus.selectionStart } : null;
+    wertZeichnen();
+    if (merk) {
+      const e = $("bereich-wert").querySelector(`[data-anz="preis"][data-i="${merk.i}"]`);
+      if (e) { e.focus(); try { e.setSelectionRange(merk.pos, merk.pos); } catch (x) {} }
+    }
+  }
+  $("bereich-wert").addEventListener("dragover", (ev) => { if (ev.target.closest("[data-ablage]")) ev.preventDefault(); });
+  $("bereich-wert").addEventListener("drop", (ev) => {
+    if (!ev.target.closest("[data-ablage]")) return;
+    ev.preventDefault();
+    anzeigenBilderDazu(ev.dataTransfer.files);
+  });
+  $("bereich-wert").addEventListener("click", (ev) => {
+    const k = ev.target.closest("[data-wert], [data-anz]");
+    if (!k) return;
+    const w = zustand.wert, box = $("bereich-wert");
+    const was = k.dataset.wert || k.dataset.anz;
+    if (was === "abrufen") toytalesAbrufen(false);
+    if (was === "neu-frage") box.querySelector("[data-wert-warnung]").hidden = false;
+    if (was === "neu-nein") box.querySelector("[data-wert-warnung]").hidden = true;
+    if (was === "neu-ja") { w.neu = true; toytalesAbrufen(true); }
+    if (was === "kandidat") { w.link = w.kandidaten[+k.dataset.i].url; w.kandidaten = []; wertZeichnen(); }
+    if (was === "anzeigen") anzeigenAuswerten();
+    if (was === "bild-weg") { w.bilder.splice(+k.dataset.i, 1); wertZeichnen(); }
+    if (was === "weg") { w.anzeigen.splice(+k.dataset.i, 1); wertNeuRechnen(); }
+    if (was === "zeile") { w.anzeigen.push({ bild: 0, titel: "eigene Eingabe", preis: 0, art: "angebot", passt: "ja", zustand: "", aufnehmen: true }); wertZeichnen(); }
+    if (was === "preis") {
+      // Dein Exemplar neu/OVP? Dann der OVP-Wert, sonst gebraucht; aus einer Spanne die Mitte
+      const quelle = /ovp|neu/i.test(w.t.zustand || "") ? box.querySelector('[data-wert-feld="richtwertOvp"]').value : box.querySelector('[data-wert-feld="richtwert"]').value;
+      const z = (quelle.replace(/,/g, ".").match(/\d+(?:\.\d+)?/g) || []).map(Number);
+      if (z.length) { const p = Math.round((z.reduce((s, n) => s + n, 0) / z.length) * 2) / 2; box.querySelector('[data-wert-feld="preis"]').value = String(p).replace(".", ","); w.geaendert.preis = String(p).replace(".", ","); }
+    }
+    if (was === "speichern") wertSpeichern();
+    if (was === "zurueck") { if (w.herkunft === "ergebnis") zeige("bereich-ergebnis"); else if (w.herkunft === "verwalten") { zeige("bereich-formular"); titelSetzen("Tonie verwalten"); } }
+    if (was === "ueberspringen") pruefenWeiter(false);
+  });
+
+  // ---------- Sammlung prüfen: in Portionen, in der Reihenfolge der Übersicht ----------
+  // Nur Tonies ohne Wert-Stand oder mit Wert-Stand älter als WERT_GUELTIG_TAGE. Höchstens 10 pro Durchgang.
+  const PORTION = 10;
+  const sitzungLesen = (k, std) => { try { return JSON.parse(sessionStorage.getItem(k)) || std; } catch (x) { return std; } };
+  const sitzungSchreiben = (k, v) => { try { sessionStorage.setItem(k, JSON.stringify(v)); } catch (x) {} };
+
+  function pruefOffen() {
+    const tage = (zustand.wert && zustand.wert.status && zustand.wert.status.gueltigTage) || zustand.gueltigTage || 30;
+    const reihenfolge = sitzungLesen("tonie-pruefen-reihenfolge", null);
+    const weg = sitzungLesen("tonie-pruefen-uebersprungen", []);
+    let liste = zustand.liste.slice();
+    if (reihenfolge && reihenfolge.length) {
+      const pos = {}; reihenfolge.forEach((id, i) => { pos[id] = i; });
+      liste = liste.filter((t) => t.id in pos).sort((a, b) => pos[a.id] - pos[b.id]);
+    } else {
+      liste.sort((a, b) => a.reihe.localeCompare(b.reihe, "de") || a.titel.localeCompare(b.titel, "de"));
+    }
+    const faellig = (t) => !t.wertStand || (Date.now() - new Date(t.wertStand + "T12:00:00")) / 86400000 >= tage;
+    return { gesamt: liste.length, offen: liste.filter((t) => faellig(t) && weg.indexOf(t.id) < 0), faellig: liste.filter(faellig).length, weg };
+  }
+
+  function pruefFortschritt() {
+    const o = pruefOffen(), d = sitzungLesen("tonie-pruefen-durchgang", 0);
+    const fertig = o.gesamt - o.faellig;
+    return `<p class="fortschritt-text"><strong>${fertig} von ${o.gesamt} geprüft</strong> · noch ${o.faellig} offen · Durchgang: ${d} von ${PORTION}</p>
+      <div class="fortschritt"><span style="width:${o.gesamt ? Math.round(fertig / o.gesamt * 100) : 0}%"></span></div>`;
+  }
+
+  async function pruefenZeigen() {
     titelSetzen("Sammlung prüfen");
-    const alle = zustand.liste;
-    const geprueft = alle.filter((t) => t.wertStand).length;
-    const weg = uebersprungen();
-    const offen = alle.filter((t) => !t.wertStand && weg.indexOf(t.id) < 0).sort(nachReihe);
-    const t = offen[0];
-    zustand.pruefTonie = t || null;
-    const fortschritt = `<p class="fortschritt-text"><strong>${geprueft} von ${alle.length} geprüft</strong>${weg.length ? ` · ${weg.length} übersprungen` : ""}</p>
-      <div class="fortschritt"><span style="width:${alle.length ? Math.round(geprueft / alle.length * 100) : 0}%"></span></div>`;
-    if (!t) {
-      $("bereich-pruefen").innerHTML = `<div class="karte-flaeche pruefen">${fortschritt}
-        <p class="fertig">${geprueft === alle.length ? `Alle ${alle.length} Tonies sind geprüft.` : "Für jetzt bist du durch: Die übrigen hast du übersprungen."}</p>
+    const st = await anfrage("wertstatus", {}, { leise: true });
+    zustand.gueltigTage = st.ok ? st.status.gueltigTage : 30;
+    const o = pruefOffen(), d = sitzungLesen("tonie-pruefen-durchgang", 0);
+    if (!o.offen.length || d >= PORTION) {
+      $("bereich-pruefen").innerHTML = `<div class="karte-flaeche pruefen">${pruefFortschritt()}
+        <p class="fertig">${!o.offen.length ? (o.faellig ? "Für jetzt bist du durch: Die übrigen hast du übersprungen." : `Alle ${o.gesamt} Tonies sind geprüft.`)
+          : `Portion geschafft (${PORTION} Tonies). Noch ${o.offen.length} offen – gern an einem anderen Tag weitermachen.`}</p>
+        ${st.ok ? `<p class="klein">ToyTales-Abrufe heute: ${st.status.heute} von ${st.status.tageslimit}.</p>` : ""}
         <div class="knopfreihe">
-          ${weg.length ? `<button type="button" class="knopf leise" data-aktion="pruefen-neu">Übersprungene noch einmal</button>` : ""}
+          ${o.offen.length && d >= PORTION ? `<button type="button" class="knopf leise" data-aktion="pruefen-portion">Nächste Portion</button>` : ""}
+          ${o.weg.length && !o.offen.length ? `<button type="button" class="knopf leise" data-aktion="pruefen-neu">Übersprungene noch einmal</button>` : ""}
           <button type="button" class="knopf" data-aktion="zur-sammlung">Zur Sammlung</button>
         </div></div>`;
       return zeige("bereich-pruefen");
     }
-    $("bereich-pruefen").innerHTML = `<div class="karte-flaeche pruefen">${fortschritt}
-      <div class="pruefen-kopf">
-        <div class="katalog-bild">${zoomBild(bildGross(t.eigenesFoto || t.bild, 400), t.titel)}</div>
-        <div>
-          <p class="reihe">${esc([t.reihe, t.kollektion].filter(Boolean).join(" · "))}</p>
-          <h2 class="titel">${esc(t.titel)}</h2>
-          <div class="marken">${t.version ? versionMarke(t.version) : ""}</div>
-          <p class="klein">Noch ${offen.length} offen.</p>
-        </div>
-      </div>
-      ${quelleKnopfHtml(t, t.wertQuelle)}
-      ${kopierhilfeHtml()}
-    </div>`;
-    zeige("bereich-pruefen");
-    const box = $("bereich-pruefen").querySelector("[data-kopierhilfe]");
-    // Felder gleich zeigen (mit den bisherigen Werten), damit man auch ohne Einfügen eintragen kann
-    befundZeigen(box, { erkannt: true, raritaet: t.raritaet || "Normal", gebraucht: t.richtwert || "", ovp: t.richtwertOvp || "",
-      quelle: t.wertQuelle || "", titel: "", version: "", vorlage: true, belege: ["Noch nichts eingefügt: bisherige Werte aus deinem Sheet."] }, t);
-    quelleKnopfFuellen($("bereich-pruefen"), t, t.wertQuelle);
+    wertAssistent(o.offen[0], "pruefen");
   }
 
-  async function pruefenSpeichern(box, w) {
-    const t = zustand.pruefTonie;
-    const felder = Object.assign({}, t, w);
-    delete felder.pruefen;
-    const a = await anfrage("aendern", { id: t.id, stand: t.geaendertAm, felder });
-    if (!a.ok) {
-      return khMeldung(box, a.code === "konflikt" ? "Dieser Tonie wurde inzwischen geändert. Bitte die Seite neu laden." : a.fehler, "fehler");
-    }
-    Object.assign(t, a.eintrag);
-    pruefenZeigen();
-  }
-
-  function pruefenUeberspringen() {
-    const weg = uebersprungen();
-    if (zustand.pruefTonie) weg.push(zustand.pruefTonie.id);
-    try { sessionStorage.setItem(UEBERSPRUNGEN, JSON.stringify(weg)); } catch (x) {}
+  function pruefenWeiter(gespeichert) {
+    const w = zustand.wert;
+    if (!gespeichert) { const weg = sitzungLesen("tonie-pruefen-uebersprungen", []); weg.push(w.t.id); sitzungSchreiben("tonie-pruefen-uebersprungen", weg); }
+    sitzungSchreiben("tonie-pruefen-durchgang", sitzungLesen("tonie-pruefen-durchgang", 0) + 1);
     pruefenZeigen();
   }
   document.addEventListener("click", (ev) => {
-    if (!ev.target.closest("[data-aktion='pruefen-neu']")) return;
-    try { sessionStorage.removeItem(UEBERSPRUNGEN); } catch (x) {}
-    pruefenZeigen();
+    if (ev.target.closest("[data-aktion='pruefen-neu']")) { sitzungSchreiben("tonie-pruefen-uebersprungen", []); pruefenZeigen(); }
+    if (ev.target.closest("[data-aktion='pruefen-portion']")) { sitzungSchreiben("tonie-pruefen-durchgang", 0); pruefenZeigen(); }
   });
 
   // ---------- Hilfen ----------

@@ -1,5 +1,5 @@
 // Quellen für Rarität und Richtwert. Jede Quelle liefert dasselbe Ergebnis ("Befund"),
-// damit später weitere Quellen (z. B. Kleinanzeigen, Vinted) dazukommen können.
+// damit mehrere Quellen zusammen einen Richtwert ergeben (ToyTales, Kleinanzeigen).
 // Hier wird nichts von einer fremden Seite abgerufen: ausgewertet wird nur Text,
 // den du selbst kopiert und eingefügt hast.
 (function () {
@@ -110,5 +110,49 @@
     },
   };
 
-  window.Quellen = { toytales };
+  // Kleinanzeigen: Die App ruft dort NIE etwas ab. Sie baut nur den Suchlink, den du selbst öffnest;
+  // ausgewertet werden deine Screenshots oder dein eingefügter Text.
+  // Das Adressmuster steht nur hier: Kategorie Spielzeug (c23) mit Filter "Versand möglich" (versand_s:ja).
+  // {begriff} = Titel + "tonie". Die Reihe lassen wir weg: Kleinanzeigen sucht nach ALLEN Wörtern,
+  // "Lieblings-Klassiker" o. Ä. steht in fast keiner Anzeige und würde fast alles ausfiltern.
+  const kleinanzeigen = {
+    name: "Kleinanzeigen",
+    muster: "https://www.kleinanzeigen.de/s-spielzeug/{begriff}/k0c23+spielzeug.versand_s:ja",
+    versandImLink: true,
+    suchLink(t) {
+      // Nur die ersten 3 aussagekräftigen Wörter des Titels: "Gute Nacht, Gorilla und weitere …" → "gute-nacht-gorilla-tonie"
+      const fuell = ["und", "weitere", "der", "die", "das", "mit", "von", "den", "dem", "ein", "eine", "the", "and"];
+      const woerter = String(t.titel || "").toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss")
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/[^a-z0-9]+/).filter((w) => w && fuell.indexOf(w) < 0).slice(0, 3);
+      const begriff = woerter.concat(woerter.indexOf("tonie") < 0 ? ["tonie"] : []).join("-");
+      return kleinanzeigen.muster.replace("{begriff}", encodeURIComponent(begriff).replace(/%2D/g, "-"));
+    },
+  };
+
+  // Statistik für die Prüftabelle: Anzahl, Min, Max, Median; Spanne ab 5 Werten aus den Quartilen
+  function statistik(werte) {
+    const z = werte.filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
+    if (!z.length) return { anzahl: 0 };
+    const q = (p) => { const i = (z.length - 1) * p, u = Math.floor(i), o = Math.ceil(i); return z[u] + (z[o] - z[u]) * (i - u); };
+    const s = { anzahl: z.length, min: z[0], max: z[z.length - 1], median: q(0.5) };
+    // Quartile auf ganze Euro gerundet, damit die Spanne lesbar bleibt
+    s.spanne = z.length >= 5 ? spanne([Math.round(q(0.25)), Math.round(q(0.75))]) : spanne([s.min, s.max]);
+    return s;
+  }
+
+  // Zustand einer Anzeige → OVP (neu, ungeöffnet, OVP) oder gebraucht
+  const istOvpZustand = (z) => /ovp|neu|unge(ö|oe)ffnet|original\s*verpackt|versiegelt/i.test(z || "") && !/wie neu/i.test(z || "");
+
+  /**
+   * Ein Vorschlag je Zustand aus allen Quellen: ToyTales-Spanne (Richtwert + Markt) und Median der
+   * aufgenommenen Anzeigen. Ergebnis als Spanne vom kleinsten bis zum größten Wert.
+   */
+  function vorschlag(toytalesSpanne, anzeigenMedian) {
+    const zahlen = String(toytalesSpanne || "").replace(/,/g, ".").match(/\d+(?:\.\d+)?/g) || [];
+    const werte = zahlen.map(Number);
+    if (Number.isFinite(anzeigenMedian)) werte.push(anzeigenMedian);
+    return spanne(werte);
+  }
+
+  window.Quellen = { toytales, kleinanzeigen, statistik, vorschlag, istOvpZustand, spanne };
 })();
