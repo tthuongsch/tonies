@@ -14,13 +14,20 @@
 
   const BEREICHE = ["bereich-sperre", "bereich-start", "bereich-formular", "bereich-ergebnis", "bereich-weiter"];
   const VERWALTEN_ID = new URLSearchParams(location.search).get("id");
-  // "Tonie erkennen" (Menü) und der Foto-Reiter in "Hinzufügen" sind derselbe Bildschirm.
+  // Ein Bereich "Tonie-Check": Foto, Name oder von Hand; danach prüfen oder hinzufügen.
+  // Alte Adressen mit ?erkennen öffnen ihn mit dem Reiter Foto.
   const ERKENNEN = new URLSearchParams(location.search).has("erkennen");
+  const CHECK = "Tonie-Check";
+  const REITER_SPEICHER = "tonie-check-reiter";
+  function gemerkterReiter() {
+    if (ERKENNEN) return "foto";
+    try { const r = localStorage.getItem(REITER_SPEICHER); return r === "suchen" ? "suchen" : "foto"; } catch (x) { return "foto"; }
+  }
   const TESTMODUS = /testmodus/.test(location.search) ? "?testmodus" : "";
 
   // Titel sofort richtig, damit nicht kurz "Tonie hinzufügen" aufblitzt
   function titelSetzen(text) { document.title = $("seitentitel").textContent = text; }
-  titelSetzen(VERWALTEN_ID ? "Tonie verwalten" : ERKENNEN ? "Tonie erkennen" : "Tonie hinzufügen");
+  titelSetzen(VERWALTEN_ID ? "Tonie verwalten" : CHECK);
 
   // ---------- Zurück zur Sammlung ----------
   // Kam man von der Übersicht, geht es mit history.back() genau dorthin zurück: kein neuer
@@ -142,7 +149,7 @@
       return;
     }
     zeige("bereich-start");
-    reiter(ERKENNEN ? "foto" : "suchen");
+    reiter(gemerkterReiter());
     katalogLaden();
     listenLaden();
     await listeLaden();
@@ -209,9 +216,9 @@
     document.querySelectorAll(".reiter [data-reiter]").forEach((k) => k.setAttribute("aria-pressed", k.dataset.reiter === name));
     if (name === "hand") return formularOeffnen({}, null);
     zeige("bereich-start");
-    // Im Einstieg "Tonie erkennen" gibt es nur den Foto-Teil, ohne Reiter
-    document.querySelector(".reiter").hidden = ERKENNEN;
-    if (name === "foto") titelSetzen(ERKENNEN ? "Tonie erkennen" : "Tonie hinzufügen");
+    titelSetzen(CHECK);
+    zustand.reiter = name;
+    try { localStorage.setItem(REITER_SPEICHER, name); } catch (x) {}
     if (name === "suchen") $("suchtext").focus();
   }
   document.addEventListener("click", (ev) => {
@@ -277,6 +284,7 @@
     const zeige = (text) => suchtext ? TonieSuche.markieren(text, suchtext, esc) : esc(text);
     const oben = [t.reihe, t.kollektion].filter(Boolean).join(" · ");
     const marken = [];
+    if (t.version) marken.push(versionMarke(t.version)); // alte Version und Neuauflage auseinanderhalten
     if (t.sicherheit) marken.push(`<span class="marke sicher-${esc(t.sicherheit)}">${SICHERHEIT[t.sicherheit] || esc(t.sicherheit)}</span>`);
     if (t.vorhanden) marken.push(`<span class="marke behalten">In deiner Liste: ${anzahlText(t.vorhanden)}</span>`);
     else if (t.format) marken.push(`<span class="marke">${esc(t.format)}</span>`);
@@ -294,9 +302,8 @@
     const k = ev.target.closest("[data-treffer]");
     if (!k) return;
     const t = zustand.trefferlisten[id][Number(k.dataset.treffer)];
-    // Aus der Fotoerkennung erst die Ergebnisansicht ("Habe ich schon?"), aus der Textsuche gleich das Formular
-    if (id === "treffer") formularOeffnen(t, t.vorhanden);
-    else ergebnisZeigen(t, null);
+    // Foto oder Name: erst die Ergebnisansicht ("Habe ich schon?", Wert), danach prüfen oder hinzufügen
+    ergebnisZeigen(t, null);
   }));
 
   // ---------- Foto ----------
@@ -466,7 +473,7 @@
     fotoAnsichtAktualisieren();
     fotoErgebnisLeeren();
     zeige("bereich-start");
-    reiter("suchen");
+    reiter(zustand.reiter || gemerkterReiter());
   }
 
   // ---------- Formular ----------
@@ -1138,10 +1145,10 @@
       </div>
       <div class="knopfreihe">
         <button type="button" class="knopf leise" data-aktion="zur-sammlung">✕ Schließen</button>
-        <button type="button" class="knopf leise" data-aktion="naechsten-erkennen">Nächsten erkennen 📷</button>
+        <button type="button" class="knopf leise" data-aktion="naechsten-erkennen">Nächsten suchen</button>
       </div>
     </div>`;
-    titelSetzen(ERKENNEN ? "Tonie erkennen" : "Tonie hinzufügen");
+    titelSetzen(CHECK);
     zeige("bereich-ergebnis");
   }
 
@@ -1167,9 +1174,10 @@
     listeLaden();
   }
 
-  // Neue Erkennung: Fotos leeren und gleich die Kamera öffnen. Das muss direkt im Klick passieren,
-  // sonst blockiert der Browser das Öffnen.
+  // Nächster Tonie im zuletzt benutzten Weg: bei Foto gleich die Kamera öffnen (muss direkt im
+  // Klick passieren, sonst blockiert der Browser), bei Name ins leere Suchfeld.
   function naechsteErkennung() {
+    const weg = zustand.reiter || gemerkterReiter();
     zustand.fotos = [];
     zustand.beschreibung = null;
     zustand.ausErkennen = false;
@@ -1178,6 +1186,13 @@
     $("foto-sofort").hidden = true;
     fotoAnsichtAktualisieren();
     fotoErgebnisLeeren();
+    if (weg === "suchen") {
+      $("suchtext").value = "";
+      trefferZeigen([], "treffer");
+      $("nichts-gefunden").hidden = true;
+      $("mehr-suchen").hidden = true;
+      return reiter("suchen");
+    }
     reiter("foto");
     $("foto-kamera").click();
   }

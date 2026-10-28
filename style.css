@@ -592,3 +592,6 @@ fieldset.wert .klein { margin: 0; }
 .klein-knopf { min-height: 36px; padding: 4px 12px; font-size: 0.85rem; }
 .zoom { width: min(96vw, 720px); }
 .zoom img { width: 100%; height: auto; max-height: 75vh; object-fit: contain; background: #fff; border-radius: 10px; }
+
+/* Reiter im Tonie-Check: Symbol mit Abstand zum Wort */
+.reiter button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
