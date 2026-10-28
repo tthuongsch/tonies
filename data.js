@@ -25,7 +25,9 @@
     "Geändert am": "geaendertAm",
     "Eigenes Foto": "eigenesFoto",
     "Version": "version",
-    "Richtwert": "richtwert",
+    "Richtwert": "richtwert", // alter Name von "Richtwert gebraucht"
+    "Richtwert gebraucht": "richtwert",
+    "Richtwert OVP": "richtwertOvp",
     "Wert-Quelle": "wertQuelle",
     "Wert-Stand": "wertStand",
   };
@@ -101,8 +103,9 @@
       geaendertAm: roh.geaendertAm || "",
       eigenesFoto: webadresse(roh.eigenesFoto),
       version: roh.version || "",
-      // Richtwert und Wert-Stand sind privat: kommen nur mit PIN/Passwort (Apps Script), nie aus der CSV.
+      // Richtwerte und Wert-Stand sind privat: kommen nur mit PIN/Passwort (Apps Script), nie aus der CSV.
       richtwert: roh.richtwert || "",
+      richtwertOvp: roh.richtwertOvp || "",
       wertQuelle: /^https:\/\//i.test(roh.wertQuelle) ? roh.wertQuelle : "",
       wertStand: roh.wertStand || "",
     };

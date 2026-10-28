@@ -212,7 +212,9 @@
     if (t.anzahlFehlt) marken.push(`<span class="marke fehlt">Anzahl fehlt</span>`);
     if (t.raritaet && t.raritaet !== "Normal") marken.push(`<span class="marke raritaet">★ ${esc(t.raritaet)}</span>`);
     if (t.version && !/^unbekannt$/i.test(t.version)) marken.push(`<span class="marke version">${esc(versionText(t.version))}</span>`);
-    if (zustand.entsperrt && t.richtwert) marken.push(`<span class="marke richtwert">Richtwert ${esc(t.richtwert)} €</span>`);
+    if (zustand.entsperrt && (t.richtwert || t.richtwertOvp)) {
+      marken.push(`<span class="marke richtwert">Richtwert ${[t.richtwert ? `gebraucht ${esc(t.richtwert)} €` : "", t.richtwertOvp ? `OVP ${esc(t.richtwertOvp)} €` : ""].filter(Boolean).join(" · ")}</span>`);
+    }
     if (zustand.sortierung === "unvollstaendig" && fehlendes(t).length) {
       marken.push(`<span class="marke fehlt">Fehlt: ${esc(fehlendes(t).join(", "))}</span>`);
     }

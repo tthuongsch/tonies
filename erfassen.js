@@ -478,7 +478,7 @@
 
   // ---------- Formular ----------
   const FELDER = ["link", "bild", "titel", "reihe", "kollektion", "format", "inhalt", "thema", "version", "raritaet", "preis", "zustand",
-    "richtwert", "wertQuelle", "wertStand", "verliehenAn", "verliehenAm", "kommentar", "pruefen"];
+    "richtwert", "richtwertOvp", "wertQuelle", "wertStand", "verliehenAn", "verliehenAm", "kommentar", "pruefen"];
 
   function feldSetzen(name, wert) {
     let w = wert === null || wert === undefined ? "" : (name === "preis" ? preisText(wert) : String(wert));
@@ -707,9 +707,9 @@
   $("f-link").addEventListener("change", versionVorbelegen);
 
   // Richtwert von Hand eingetragen → Wert-Stand heute (falls leer): dann gilt der Tonie als geprüft.
-  $("f-richtwert").addEventListener("change", () => {
-    if ($("f-richtwert").value.trim() && !$("f-wertStand").value) $("f-wertStand").value = heuteBerlin();
-  });
+  ["f-richtwert", "f-richtwertOvp"].forEach((id) => $(id).addEventListener("change", () => {
+    if ($(id).value.trim() && !$("f-wertStand").value) $("f-wertStand").value = heuteBerlin();
+  }));
   function quelleKnopf() {
     const url = $("f-wertQuelle").value.trim();
     const ok = /^https:\/\/\S+$/i.test(url);
@@ -869,17 +869,19 @@
     try { const z = JSON.parse(localStorage.getItem(PIN_SPEICHER)); return z && z.schluessel && z.bis > Date.now() ? z : null; }
     catch (x) { return null; }
   }
-  const PRIVAT = ["preis", "kommentar", "verliehenAn", "verliehenAm", "richtwert", "wertStand"];
+  const PRIVAT = ["preis", "kommentar", "verliehenAn", "verliehenAm", "richtwert", "richtwertOvp", "wertStand"];
 
   function nurLesen(an) {
     $("form-tonie").querySelectorAll("input, select, textarea, button:not([data-aktion='zur-sammlung'])")
       .forEach((e) => { e.disabled = an; });
     $("form-tonie").classList.toggle("nur-lesen", an);
+    $("form-kopierhilfe").hidden = an; // nur ansehen: nichts einfügen
     $("lesen-leiste").hidden = !an;
     if (!an) {
       $("eintragen").hidden = false;
       document.querySelector(".eigenes-foto").hidden = false;
-      PRIVAT.forEach((f) => { $("f-" + f).placeholder = { preis: "z. B. 12,50", verliehenAn: "leer = nicht verliehen", richtwert: "z. B. 25 oder 20–30" }[f] || ""; });
+      PRIVAT.forEach((f) => { $("f-" + f).placeholder = { preis: "z. B. 12,50", verliehenAn: "leer = nicht verliehen",
+        richtwert: "z. B. 17–22", richtwertOvp: "z. B. 20–23" }[f] || ""; });
     }
   }
 
@@ -922,11 +924,12 @@
     nurLesen(true);
     if (!privat) {
       $("f-richtwert").placeholder = "🔒 mit PIN sichtbar";
+      $("f-richtwertOvp").placeholder = "🔒 mit PIN sichtbar";
       $("f-preis").placeholder = "🔒 mit PIN sichtbar";
       $("f-kommentar").placeholder = "🔒 mit PIN sichtbar";
       $("f-verliehenAn").placeholder = t.verliehen === true || t.verliehen === "ja" ? "🔒 verliehen – an wen: mit PIN" : "nicht verliehen";
     } else {
-      ["preis", "kommentar", "richtwert"].forEach((f) => { $("f-" + f).placeholder = "–"; });
+      ["preis", "kommentar", "richtwert", "richtwertOvp"].forEach((f) => { $("f-" + f).placeholder = "–"; });
       $("f-verliehenAn").placeholder = "nicht verliehen";
     }
     $("lesen-pin-knopf").hidden = privat;
@@ -1096,22 +1099,12 @@
     return { genau: genau[0] || null, andere: gleich.filter((x) => genau.indexOf(x) < 0) };
   }
 
-  // Quellen für Rarität und Richtwert. Nur hier steht etwas über ToyTales (Link-Aufbau);
-  // eine spätere Quelle (z. B. Kleinanzeigen) kommt als weiterer Eintrag dazu.
-  const Quellen = {
-    toytales: {
-      name: "ToyTales",
-      // DuckDuckGo: im Test gleich gute Treffer wie Bing, ohne Cookie-Banner (Google zeigte nur Übersichtsseiten)
-      suchLink(t) {
-        const v = t.version && !/^(original|unbekannt)$/i.test(t.version) ? t.version : "";
-        return "https://duckduckgo.com/?q=" + encodeURIComponent(`site:toytales.eu ${t.titel} ${t.reihe} ${v}`.replace(/\s+/g, " ").trim());
-      },
-      // Direktlink aus der Adressliste (Apps Script, nur bei sicherem Treffer)
-      async direktLink(t) {
-        const a = await anfrage("toytales", { titel: t.titel, reihe: t.reihe, kollektion: t.kollektion, format: t.format, version: t.version }, { leise: true });
-        return a.ok ? { url: a.url, sicher: a.sicher } : { url: "", sicher: false, fehler: a.fehler };
-      },
-    },
+  // Quellen für Rarität und Richtwert stehen in quellen.js (Suchlink, Regeln für eingefügten Text).
+  // Hier nur der Direktlink, der das Apps Script fragt.
+  const Quellen = window.Quellen;
+  Quellen.toytales.direktLink = async (t) => {
+    const a = await anfrage("toytales", { titel: t.titel, reihe: t.reihe, kollektion: t.kollektion, format: t.format, version: t.version }, { leise: true });
+    return a.ok ? { url: a.url, sicher: a.sicher } : { url: "", sicher: false, fehler: a.fehler };
   };
 
   // Knopf "Bei ToyTales prüfen": gespeicherte Wert-Quelle → sicherer Direktlink → Suche.
@@ -1152,10 +1145,7 @@
     }
     const { genau, andere } = inDerListe(t);
     zustand.ergebnis = { t, genau };
-    const werte = genau && (genau.raritaet || genau.richtwert || genau.wertStand)
-      ? `${genau.raritaet ? "★ " + esc(genau.raritaet) : "Rarität: Normal"}${genau.richtwert ? " · Richtwert " + esc(genau.richtwert) + " €" : ""}
-         ${genau.wertStand ? `<span class="klein">(von dir übernommen am ${esc(datumKurz(genau.wertStand))})</span>` : `<span class="klein">(noch nicht geprüft)</span>`}`
-      : `<span class="klein">Noch nicht geprüft.</span>`;
+    const werte = wertText(genau);
     const gespeicherteQuelle = genau && genau.wertQuelle ? genau.wertQuelle : "";
     $("bereich-ergebnis").innerHTML = `<div class="karte-flaeche ergebnis">
       <div class="vergleich">${deineFotos()}<div class="katalog-bild">${zoomBild(bildGross(t.eigenesFoto || t.bild, 600), t.titel)}</div></div>
@@ -1171,8 +1161,9 @@
       </div>
       <div class="ergebnis-block">
         <h3>Rarität und Richtwert</h3>
-        <p>${werte}</p>
+        <p data-werte>${werte}</p>
         ${quelleKnopfHtml(t, gespeicherteQuelle)}
+        ${kopierhilfeHtml()}
       </div>
       <div class="knopfreihe">
         ${genau ? `<button type="button" class="knopf" data-ergebnis="erhoehen">Anzahl erhöhen</button>
@@ -1195,6 +1186,8 @@
     const { t, genau } = zustand.ergebnis;
     formularOeffnen(k.dataset.ergebnis === "erhoehen" ? genau : t, null);
     if (k.dataset.ergebnis === "erhoehen") ergaenzenModus(genau);
+    // Aus der Kopierhilfe übernommene Werte gleich ins Formular
+    if (zustand.ergebnis.werte) werteInsFormular(zustand.ergebnis.werte);
     if (k.dataset.ergebnis === "andere-version") {
       zustand.andereVersion = true;
       $("f-version").value = "";
@@ -1238,6 +1231,163 @@
     const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
     return m ? `${m[3]}.${m[2]}.${m[1].slice(2)}` : iso;
   }
+
+  // ---------- Kopierhilfe: Werte von ToyTales selbst übernehmen ----------
+  // Du kopierst Text (oder machst einen Screenshot) auf der ToyTales-Seite und fügst ihn hier ein.
+  // Text wird kostenlos mit Regeln gelesen (quellen.js), ein Screenshot mit einer kleinen Claude-Abfrage.
+  function wertText(e) {
+    if (!e || !(e.raritaet || e.richtwert || e.richtwertOvp || e.wertStand)) return `<span class="klein">Noch nicht geprüft.</span>`;
+    const teile = [e.raritaet && e.raritaet !== "Normal" ? "★ " + esc(e.raritaet) : "Rarität: Normal"];
+    if (e.richtwert) teile.push(`gebraucht ${esc(e.richtwert)} €`);
+    if (e.richtwertOvp) teile.push(`OVP ${esc(e.richtwertOvp)} €`);
+    return teile.join(" · ") + (e.wertStand ? ` <span class="klein">(von dir übernommen am ${esc(datumKurz(e.wertStand))})</span>`
+      : ` <span class="klein">(noch nicht geprüft)</span>`);
+  }
+
+  function kopierhilfeHtml() {
+    return `<div class="kopierhilfe" data-kopierhilfe>
+      <label>Text oder Screenshot von ToyTales einfügen</label>
+      <textarea data-kh-text rows="3" placeholder="Auf der ToyTales-Seite alles markieren (Cmd+A), kopieren und hier einfügen"></textarea>
+      <div class="knopfreihe links">
+        <button type="button" class="knopf leise" data-kh="einfuegen">📋 Einfügen</button>
+        <label class="knopf leise">🖼 Screenshot<input type="file" accept="image/*" data-kh-bild hidden></label>
+      </div>
+      <p class="klein" data-kh-meldung hidden></p>
+      <div class="kh-ergebnis" data-kh-ergebnis hidden></div>
+    </div>`;
+  }
+  // Kopierhilfe auch im Formular (Hinzufügen, Verwalten)
+  $("form-kopierhilfe").innerHTML = kopierhilfeHtml();
+
+  // Gehört die eingefügte Seite zu diesem Tonie? (grober Wortvergleich, nur als Hinweis)
+  function passtZumTonie(befundTitel, t) {
+    if (!befundTitel || !t || !t.titel) return true;
+    // Füllwörter ("der", "und" …) zählen nicht, sonst passt "Der Grüffelo" zu "In der Weihnachtsbäckerei"
+    const fuell = ["der", "die", "das", "und", "mit", "von", "den", "dem", "des", "ein", "eine", "the", "and", "weitere", "tonie"];
+    const w = (x) => vereinfachen(x).split(/[^a-z0-9]+/).filter((y) => y.length > 2 && fuell.indexOf(y) < 0);
+    const b = w(befundTitel);
+    return w(t.titel).some((x) => b.indexOf(x) >= 0);
+  }
+
+  function befundZeigen(box, befund, t) {
+    const erg = box.querySelector("[data-kh-ergebnis]");
+    if (!befund.erkannt) {
+      erg.hidden = true;
+      return khMeldung(box, "In diesem Text habe ich keine Werte gefunden. Bitte die ganze ToyTales-Seite kopieren (Cmd+A, Cmd+C).");
+    }
+    khMeldung(box, "");
+    box.befund = befund;
+    const opt = (w, aktiv) => `<option${w === aktiv ? " selected" : ""}>${w}</option>`;
+    erg.hidden = false;
+    erg.innerHTML = `<p><strong>Erkannt – bitte prüfen</strong></p>
+      ${passtZumTonie(befund.titel, t) ? "" : `<p class="klein warnung-text">Die Seite gehört zu „${esc(befund.titel)}“. Passt das zu „${esc(t.titel)}“?</p>`}
+      ${befund.version && t && t.version && vereinfachen(befund.version) !== vereinfachen(t.version)
+        ? `<p class="klein warnung-text">Die Seite ist die ${esc(befund.version)}, gewählt ist ${esc(versionText(t.version))}.</p>` : ""}
+      <div class="zweispaltig">
+        <div><label>Rarität</label><select data-kh-feld="raritaet">${["Normal", "Selten", "Rarität", "Munkelität"].map((w) => opt(w, befund.raritaet || "Normal")).join("")}</select></div>
+        <div><label>Richtwert gebraucht (€)</label><input data-kh-feld="richtwert" inputmode="decimal" value="${esc(befund.gebraucht)}"></div>
+        <div><label>Richtwert OVP (€)</label><input data-kh-feld="richtwertOvp" inputmode="decimal" value="${esc(befund.ovp)}"></div>
+        <div><label>Wert-Quelle</label><input data-kh-feld="wertQuelle" type="url" value="${esc(befund.quelle)}" placeholder="https://toytales.eu/wiki/…"></div>
+      </div>
+      <details class="klein"><summary>Woher die Zahlen kommen</summary><ul>${befund.belege.map((b) => `<li>${esc(b)}</li>`).join("")}</ul></details>
+      <div class="knopfreihe links">
+        <button type="button" class="knopf" data-kh="uebernehmen">Übernehmen</button>
+        <button type="button" class="knopf leise" data-kh="verwerfen">Verwerfen</button>
+      </div>`;
+  }
+  function khMeldung(box, text, art) {
+    const m = box.querySelector("[data-kh-meldung]");
+    m.hidden = !text;
+    m.textContent = text || "";
+    m.dataset.art = art || "hinweis";
+  }
+  // Zu welchem Tonie gehört die Kopierhilfe gerade? Ergebnisansicht oder Formular
+  function khTonie(box) {
+    return box.closest("#bereich-ergebnis") ? zustand.ergebnis.t : formularWerte();
+  }
+  function khText(box) {
+    befundZeigen(box, Quellen.toytales.textLesen(box.querySelector("[data-kh-text]").value), khTonie(box));
+  }
+
+  function werteInsFormular(w) {
+    if (w.raritaet !== undefined) $("f-raritaet").value = w.raritaet === "Normal" ? "" : w.raritaet;
+    ["richtwert", "richtwertOvp", "wertQuelle", "wertStand"].forEach((f) => { if (w[f] !== undefined) $("f-" + f).value = w[f]; });
+    quelleKnopf();
+  }
+
+  async function khUebernehmen(box) {
+    const feld = (f) => box.querySelector(`[data-kh-feld="${f}"]`).value.trim();
+    const w = { raritaet: feld("raritaet"), richtwert: feld("richtwert"), richtwertOvp: feld("richtwertOvp"),
+      wertQuelle: feld("wertQuelle"), wertStand: heuteBerlin() };
+    const imErgebnis = !!box.closest("#bereich-ergebnis");
+    if (!imErgebnis) {
+      werteInsFormular(w);
+      box.querySelector("[data-kh-ergebnis]").hidden = true;
+      return khMeldung(box, "Übernommen – bitte unten speichern.", "ok");
+    }
+    const { genau } = zustand.ergebnis;
+    if (!genau) {
+      // Noch nicht in der Sammlung: Werte merken, sie landen beim Hinzufügen im Formular
+      zustand.ergebnis.werte = w;
+      box.querySelector("[data-kh-ergebnis]").hidden = true;
+      $("bereich-ergebnis").querySelector("[data-werte]").innerHTML = wertText(w) + ` <span class="klein">– wird beim Hinzufügen gespeichert</span>`;
+      return khMeldung(box, "Übernommen. Gespeichert wird beim „Zur Sammlung hinzufügen“.", "ok");
+    }
+    // Schon in der Sammlung: direkt im Eintrag speichern (alle Felder mitschicken, sonst würden sie geleert)
+    const felder = Object.assign({}, genau, w);
+    delete felder.pruefen;
+    const a = await anfrage("aendern", { id: genau.id, stand: genau.geaendertAm, felder });
+    if (!a.ok) return khMeldung(box, a.code === "konflikt" ? "Dieser Tonie wurde inzwischen geändert. Bitte die Seite neu laden." : a.fehler, "fehler");
+    Object.assign(genau, a.eintrag);
+    box.querySelector("[data-kh-ergebnis]").hidden = true;
+    box.querySelector("[data-kh-text]").value = "";
+    $("bereich-ergebnis").querySelector("[data-werte]").innerHTML = wertText(genau);
+    khMeldung(box, "Gespeichert.", "ok");
+  }
+
+  let khTimer;
+  document.addEventListener("input", (ev) => {
+    const ta = ev.target.closest("[data-kh-text]");
+    if (!ta) return;
+    clearTimeout(khTimer);
+    khTimer = setTimeout(() => khText(ta.closest("[data-kopierhilfe]")), 300);
+  });
+  document.addEventListener("click", async (ev) => {
+    const k = ev.target.closest("[data-kh]");
+    if (!k) return;
+    const box = k.closest("[data-kopierhilfe]");
+    if (k.dataset.kh === "einfuegen") {
+      try {
+        box.querySelector("[data-kh-text]").value = await navigator.clipboard.readText();
+        khText(box);
+      } catch (x) {
+        khMeldung(box, "Einfügen geht hier nicht direkt: bitte ins Feld tippen, lange drücken und „Einfügen“ wählen.");
+        box.querySelector("[data-kh-text]").focus();
+      }
+    }
+    if (k.dataset.kh === "verwerfen") { box.querySelector("[data-kh-ergebnis]").hidden = true; box.querySelector("[data-kh-text]").value = ""; }
+    if (k.dataset.kh === "uebernehmen") khUebernehmen(box);
+  });
+  document.addEventListener("change", async (ev) => {
+    const inp = ev.target.closest("[data-kh-bild]");
+    if (!inp || !inp.files[0]) return;
+    const box = inp.closest("[data-kopierhilfe]");
+    khMeldung(box, "Screenshot wird ausgewertet …");
+    try {
+      // 1600 px: Zahlen und Schrift bleiben lesbar
+      const bild = await fotoVerkleinern(inp.files[0], 1600);
+      const a = await anfrage("wertbild", { bild });
+      budgetZeigen(a.budget);
+      if (!a.ok) return khMeldung(box, a.fehler, "fehler");
+      const befund = Quellen.toytales.ausBild(a.werte);
+      befund.quelle = a.werte.adresse || "";
+      befundZeigen(box, befund, khTonie(box));
+    } catch (x) {
+      khMeldung(box, "Dieses Bild ließ sich nicht lesen.", "fehler");
+    } finally {
+      inp.value = "";
+    }
+  });
 
   // ---------- Hilfen ----------
   function esc(text) {

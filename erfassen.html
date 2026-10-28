@@ -7,7 +7,7 @@
   <meta name="robots" content="noindex, nofollow">
   <!-- Versionsnummer (?v=…) bei jeder neuen Fassung erhöhen: Dann lädt der Browser die Dateien neu
        statt eine alte Fassung aus dem Zwischenspeicher zu mischen. -->
-  <link rel="stylesheet" href="style.css?v=11">
+  <link rel="stylesheet" href="style.css?v=12">
 </head>
 <body class="erfassen">
   <header class="kopf">
@@ -232,8 +232,12 @@
               <select id="f-raritaet" name="raritaet"><option value="">Normal</option><option>Selten</option><option>Rarität</option><option>Munkelität</option></select>
             </div>
             <div class="privat">
-              <label for="f-richtwert">Richtwert (€)</label>
-              <input id="f-richtwert" name="richtwert" inputmode="decimal" placeholder="z. B. 25 oder 20–30">
+              <label for="f-richtwert">Richtwert gebraucht (€)</label>
+              <input id="f-richtwert" name="richtwert" inputmode="decimal" placeholder="z. B. 17–22">
+            </div>
+            <div class="privat">
+              <label for="f-richtwertOvp">Richtwert OVP (€)</label>
+              <input id="f-richtwertOvp" name="richtwertOvp" inputmode="decimal" placeholder="z. B. 20–23">
             </div>
             <div>
               <label for="f-wertQuelle">Wert-Quelle (Link)</label>
@@ -245,7 +249,8 @@
               <input id="f-wertStand" name="wertStand" type="date">
             </div>
           </div>
-          <p class="klein">Mit Datum bei „Wert-Stand“ gilt der Tonie als geprüft. Richtwert und Wert-Stand sind privat.</p>
+          <p class="klein">Mit Datum bei „Wert-Stand“ gilt der Tonie als geprüft. Richtwerte und Wert-Stand sind privat.</p>
+          <div id="form-kopierhilfe"></div>
         </fieldset>
 
         <fieldset class="feld verleihen privat">
@@ -301,9 +306,10 @@
   </main>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-  <script src="config.js?v=11"></script>
-  <script src="data.js?v=11"></script>
-  <script src="suche.js?v=11"></script>
+  <script src="config.js?v=12"></script>
+  <script src="data.js?v=12"></script>
+  <script src="quellen.js?v=12"></script>
+  <script src="suche.js?v=12"></script>
   <script>
     // Testmodus nur lokal: echte Abläufe gegen nachgebautes Sheet, ohne Google.
     if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && /testmodus/.test(location.search)) {
@@ -311,6 +317,6 @@
         '<script src="tools/gs_attrappe.js"><\/script><script src="tools/erfassen_testmodus.js"><\/script>');
     }
   </script>
-  <script src="erfassen.js?v=11"></script>
+  <script src="erfassen.js?v=12"></script>
 </body>
 </html>

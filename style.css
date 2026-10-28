@@ -595,3 +595,17 @@ fieldset.wert .klein { margin: 0; }
 
 /* Reiter im Tonie-Check: Symbol mit Abstand zum Wort */
 .reiter button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+
+/* Kopierhilfe: Werte von ToyTales selbst übernehmen */
+.kopierhilfe { display: grid; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--linie); }
+.kopierhilfe textarea { width: 100%; font: inherit; font-size: 16px; padding: 10px 12px; border: 1px dashed var(--linie); border-radius: 10px; background: var(--flaeche); }
+.kopierhilfe .knopfreihe { margin-top: 0; }
+.kh-ergebnis { display: grid; gap: 8px; padding: 10px; border-radius: 10px; background: var(--hintergrund); }
+.kh-ergebnis p { margin: 0; }
+.kh-ergebnis input, .kh-ergebnis select { width: 100%; font: inherit; font-size: 16px; padding: 8px 10px; border: 1px solid var(--linie); border-radius: 8px; background: var(--flaeche); }
+.kh-ergebnis label { font-weight: 600; font-size: 0.85rem; display: block; margin-bottom: 2px; }
+.kh-ergebnis ul { margin: 4px 0 0; padding-left: 18px; }
+.warnung-text { color: var(--verkaufen); font-weight: 600; }
+.kopierhilfe [data-kh-meldung][data-art="ok"] { color: var(--behalten); font-weight: 600; }
+.kopierhilfe [data-kh-meldung][data-art="fehler"] { color: var(--fehlt); font-weight: 600; }
+.kopierhilfe .knopf { gap: 6px; }
