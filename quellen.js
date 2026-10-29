@@ -59,7 +59,9 @@
 
       // Rarität: Zeile direkt unter "Richtwert" (z. B. "Rarität", "Munkelität", "Keine Rarität"),
       // sonst das Kennzeichen oben ("Auf der Raritätenliste")
-      const richt = abschnitt(text, /^\s*Richtwert\s*$/m, /^\s*(Inhalte|Tracklist|Rezensionen)\s*$/m);
+      // Der echte Abschnitt "Richtwert" ist der, in dessen Nähe "Gebraucht:" steht (nicht das Inhaltsverzeichnis)
+      const richt = abschnitt(text, /^[ \t]*Richtwert[ \t]*\n(?:[^\n]*\n){0,4}?[ \t]*Gebraucht:/im, /^\s*(Inhalte|Tracklist|Rezensionen)\s*$/m)
+        || abschnitt(text, /^\s*Richtwert\s*$/m, /^\s*(Inhalte|Tracklist|Rezensionen)\s*$/m);
       const unterRichtwert = (richt.split("\n").map((z) => z.trim()).filter(Boolean)[1]) || "";
       let raritaet = toytales.raritaetAus(unterRichtwert);
       if (!raritaet && titelZeile) raritaet = toytales.raritaetAus((text.split(titelZeile)[0] || "").slice(-200));
@@ -73,7 +75,8 @@
       if (ro) { ovp.push(zahl(ro[1])); belege.push(`Richtwert OVP: ${ro[1]} €`); }
 
       // Markt: Angebote ("ab") und Gesuche ("bis") je Zustand
-      const markt = abschnitt(text, /^\s*Markt\s*$/m, /^\s*Richtwert\s*$/m);
+      // Der echte Abschnitt "Markt" ist der, auf den "Angebote" oder "Gesuche" folgt (Groß-/Kleinschreibung egal)
+      const markt = abschnitt(text, /^[ \t]*Markt[ \t]*\n(?:[ \t]*\n)*[ \t]*(Angebote|Gesuche)\b/im, /^\s*Richtwert\s*$/m);
       let m;
       ZUSTAND.lastIndex = 0;
       while ((m = ZUSTAND.exec(markt))) {

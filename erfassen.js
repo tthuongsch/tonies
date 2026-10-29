@@ -1593,7 +1593,9 @@
     if (a.status) w.status = a.status;
     if (!a.ok) { wertZeichnen(); return wertMeldung("tt", a.fehler + (a.status ? ` (${a.status.heute} von ${a.status.tageslimit} Abrufen heute)` : "")); }
     if (a.gespeichert) { wertZeichnen(); return wertMeldung("tt", "Gespeicherter Wert ist noch aktuell – kein neuer Abruf nötig.", "hinweis"); }
-    const b = Quellen.toytales.ausBild(a.werte);
+    // Roboter-Browser liefert den sichtbaren Seitentext → dieselben Regeln wie die Kopierhilfe; die Schnittstelle liefert fertige Werte
+    const b = a.text ? Quellen.toytales.textLesen(a.text) : Quellen.toytales.ausBild(a.werte);
+    if (!b.erkannt) { wertZeichnen(); return wertMeldung("tt", "Seite geöffnet, aber keine Werte gefunden. Bitte „ToyTales öffnen“ und den Text in die Kopierhilfe einfügen."); }
     wertToytalesSetzen({ raritaet: b.raritaet, gebraucht: b.gebraucht, ovp: b.ovp, quelle: a.link, belege: b.belege, von: "abgerufen" });
     wertMeldung("tt", `Abgerufen (${a.status.heute} von ${a.status.tageslimit} heute).`, "ok");
   }
