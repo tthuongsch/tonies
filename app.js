@@ -231,26 +231,30 @@
     const titelIstReihe = sortierer.compare(t.titel, t.reihe) === 0;
     const oben = [titelIstReihe ? "" : t.reihe, t.kollektion].filter(Boolean).join(" · ");
 
+    // Feste Reihenfolge im Textteil: Infos (Rarität, Version) → Anzahl → Preis · Zustand
+    const infos = [];
+    if (t.raritaet && t.raritaet !== "Normal") infos.push(`<span class="raritaet-text">★ ${esc(t.raritaet)}</span>`);
+    if (t.version && !/^unbekannt$/i.test(t.version)) infos.push(`<span class="marke version">${esc(versionText(t.version))}</span>`);
+
     const marken = [];
-    // Anzahl-Marken immer beide (in jeder Ansicht), nebeneinander; Preis und Zustand des Verkaufs-Exemplars in eigener Zeile darunter
     if (t.verkaufen > 0) marken.push(`<span class="marke verkaufen">${t.verkaufen}× verkaufen</span>`);
     if (t.behalten > 0) marken.push(`<span class="marke behalten">${t.behalten}× behalten</span>`);
-    if (t.verkaufen > 0) {
-      const info = [];
-      if (!zustand.entsperrt) info.push(gesperrt("Preis")); // der Preis ist privat
-      else if (t.preis !== null) info.push(`<strong>${preisText(t.preis)}</strong>`);
-      if (t.zustand) info.push(esc(t.zustand));
-      if (info.length) marken.push(`<span class="verkauf-info">${info.join(" · ")}</span>`);
-    }
     if (t.anzahlFehlt) marken.push(`<span class="marke fehlt">Anzahl fehlt</span>`);
-    if (t.version && !/^unbekannt$/i.test(t.version)) marken.push(`<span class="marke version">${esc(versionText(t.version))}</span>`);
-    if (zustand.sortierung === "unvollstaendig" && fehlendes(t).length) {
-      marken.push(`<span class="marke fehlt">Fehlt: ${esc(fehlendes(t).join(", "))}</span>`);
-    }
     if (t.verliehen) {
       marken.push(zustand.entsperrt && t.verliehenAn
         ? `<span class="marke verliehen">Verliehen an ${esc(t.verliehenAn)} ${kurzDatum(t.verliehenAm)}</span>`
         : zustand.entsperrt ? `<span class="marke verliehen">verliehen</span>` : gesperrt("verliehen"));
+    }
+    if (zustand.sortierung === "unvollstaendig" && fehlendes(t).length) {
+      marken.push(`<span class="marke fehlt">Fehlt: ${esc(fehlendes(t).join(", "))}</span>`);
+    }
+
+    // Preis und Zustand des Verkaufs-Exemplars ganz unten
+    const verkauf = [];
+    if (t.verkaufen > 0) {
+      if (!zustand.entsperrt) verkauf.push(gesperrt("Preis")); // der Preis ist privat
+      else if (t.preis !== null) verkauf.push(`<strong>${preisText(t.preis)}</strong>`);
+      if (t.zustand) verkauf.push(esc(t.zustand));
     }
 
     const details = [t.inhalt, t.thema].filter(Boolean).map(esc).join(" · ");
@@ -261,12 +265,14 @@
       <div class="bild">
         ${bild(t)}
         ${t.format ? `<span class="format">${esc(t.format)}</span>` : ""}
+        ${t.bewertung ? `<span class="bild-bewertung" aria-label="Bewertung ${t.bewertung} von 5 Sternen">${t.bewertung} ★</span>` : ""}
       </div>
       <div class="text">
         ${oben ? `<p class="reihe">${markiert(oben)}</p>` : ""}
-        <h2 class="titel">${markiert(t.titel)}${t.bewertung ? ` <span class="bewertung" aria-label="${t.bewertung} von 5 Sternen">${t.bewertung} ★</span>` : ""}</h2>
-        ${t.raritaet && t.raritaet !== "Normal" ? `<p class="raritaet-zeile">★ ${esc(t.raritaet)}</p>` : ""}
-        <div class="marken">${marken.join("")}</div>
+        <h2 class="titel">${markiert(t.titel)}</h2>
+        ${infos.length ? `<div class="marken infos">${infos.join("")}</div>` : ""}
+        ${marken.length ? `<div class="marken">${marken.join("")}</div>` : ""}
+        ${verkauf.length ? `<p class="verkauf-info">${verkauf.join(" · ")}</p>` : ""}
         ${details ? `<p class="details">${details}</p>` : ""}
         ${zustand.entsperrt && t.kommentar ? `<p class="kommentar">${markiert(t.kommentar)}</p>` : ""}
         ${t.link ? quelleKnopf(t.link) : ""}

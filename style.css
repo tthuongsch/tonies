@@ -692,3 +692,13 @@ table.anzeigen tr.aus td { color: var(--leise); }
 .erinnerung-kopf { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .erinnerung-kopf h2 { margin: 0; font-size: 1.1rem; }
 #erinnerung-punkte { margin: 4px 0 12px; padding-left: 20px; }
+
+/* Karte: Bewertung oben rechts im Bild; im Text Infos → Anzahl → Preis · Zustand */
+.bild-bewertung {
+  position: absolute; right: 8px; top: 8px; padding: 2px 9px; border-radius: 999px;
+  background: #fff3c4; color: #8a6100; font-size: 0.8rem; font-weight: 700; white-space: nowrap;
+}
+.marken.infos { align-items: center; gap: 4px 8px; }
+.raritaet-text { font-size: 0.85rem; font-weight: 700; color: #8a6100; }
+.text > .marken + .marken { margin-top: 2px; }
+.text > .verkauf-info { margin: 2px 0 0; font-size: 0.85rem; }
