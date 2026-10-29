@@ -236,7 +236,7 @@ main {
 
 /* Verkaufsgruppe: "1× verkaufen" mit Preis und Zustand, eigene Zeile vor "behalten" */
 .verkauf-gruppe { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
-.verkauf-info { font-size: 0.85rem; }
+.verkauf-info { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 0.85rem; }
 
 .bild {
   position: relative;

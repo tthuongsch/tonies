@@ -232,17 +232,15 @@
     const oben = [titelIstReihe ? "" : t.reihe, t.kollektion].filter(Boolean).join(" · ");
 
     const marken = [];
-    // Verkaufsgruppe: Preis und Zustand gehören zum Exemplar im Verkauf, deshalb direkt dahinter.
-    if (ansicht !== "behalten" && t.verkaufen > 0) {
+    // Anzahl-Marken immer beide (in jeder Ansicht), nebeneinander; Preis und Zustand des Verkaufs-Exemplars in eigener Zeile darunter
+    if (t.verkaufen > 0) marken.push(`<span class="marke verkaufen">${t.verkaufen}× verkaufen</span>`);
+    if (t.behalten > 0) marken.push(`<span class="marke behalten">${t.behalten}× behalten</span>`);
+    if (t.verkaufen > 0) {
       const info = [];
       if (!zustand.entsperrt) info.push(gesperrt("Preis")); // der Preis ist privat
       else if (t.preis !== null) info.push(`<strong>${preisText(t.preis)}</strong>`);
       if (t.zustand) info.push(esc(t.zustand));
-      marken.push(`<span class="verkauf-gruppe"><span class="marke verkaufen">${t.verkaufen}× verkaufen</span>` +
-        `${info.length ? `<span class="verkauf-info">${info.join(" · ")}</span>` : ""}</span>`);
-    }
-    if (ansicht !== "verkaufen" && t.behalten > 0) {
-      marken.push(`<span class="marke behalten">${t.behalten}× behalten</span>`);
+      if (info.length) marken.push(`<span class="verkauf-info">${info.join(" · ")}</span>`);
     }
     if (t.anzahlFehlt) marken.push(`<span class="marke fehlt">Anzahl fehlt</span>`);
     if (t.version && !/^unbekannt$/i.test(t.version)) marken.push(`<span class="marke version">${esc(versionText(t.version))}</span>`);
