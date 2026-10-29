@@ -9,7 +9,7 @@
   <meta name="robots" content="noindex, nofollow">
   <!-- Versionsnummer (?v=…) bei jeder neuen Fassung erhöhen: Dann lädt der Browser die Dateien neu
        statt eine alte Fassung aus dem Zwischenspeicher zu mischen. -->
-  <link rel="stylesheet" href="style.css?v=18">
+  <link rel="stylesheet" href="style.css?v=20">
 </head>
 <body>
   <!-- Bleibt beim Scrollen oben: Titel, Schloss, Menü und Suche -->
@@ -99,8 +99,9 @@
     </div>
     <div class="filter">
       <label>Reihe<select data-filter="reihe"><option value="">alle</option></select></label>
-      <label>Format<select data-filter="format"><option value="">alle</option></select></label>
-      <label>Inhalt<select data-filter="inhalt"><option value="">alle</option></select></label>
+      <!-- Format und Inhalt: mehrere Werte gleichzeitig (z. B. alle Figuren ohne Audioinhalte) -->
+      <fieldset class="filter-haken" data-filter-mehr="format"><legend>Format</legend><div class="haken-gitter"></div></fieldset>
+      <fieldset class="filter-haken" data-filter-mehr="inhalt"><legend>Inhalt</legend><div class="haken-gitter"></div></fieldset>
       <label>Thema<select data-filter="thema"><option value="">alle</option></select></label>
       <label>Zustand (Verkauf)<select data-filter="zustand"><option value="">alle</option></select></label>
       <label>Rarität<select data-filter="raritaet"><option value="">alle</option></select></label>
@@ -125,15 +126,15 @@
   </dialog>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-  <script src="config.js?v=18"></script>
+  <script src="config.js?v=20"></script>
   <script>
     // Testmodus nur lokal: echte Abläufe gegen nachgebautes Sheet, ohne Google.
     if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && /testmodus/.test(location.search)) {
       document.write('<script src="tools/gs_attrappe.js"><\/script><script src="tools/erfassen_testmodus.js"><\/script>');
     }
   </script>
-  <script src="data.js?v=18"></script>
-  <script src="suche.js?v=18"></script>
-  <script src="app.js?v=18"></script>
+  <script src="data.js?v=20"></script>
+  <script src="suche.js?v=20"></script>
+  <script src="app.js?v=20"></script>
 </body>
 </html>

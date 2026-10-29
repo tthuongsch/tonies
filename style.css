@@ -651,3 +651,20 @@ table.anzeigen tr.aus td { color: var(--leise); }
 #preis-historie ul { margin: 4px 0 0; padding-left: 18px; }
 .kh-umschlag .kopierhilfe { border-top: 0; padding-top: 0; }
 .kh-umschlag .kopierhilfe > label { display: none; }
+
+/* Bewertung: 5 Sterne zum Antippen; in der Übersicht "4 ★" hinter dem Namen */
+.bewertung-zeile { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.sterne { display: inline-flex; gap: 2px; }
+.stern { border: 0; background: none; padding: 4px 2px; font-size: 1.7rem; line-height: 1; color: #d9d3c7; cursor: pointer; min-width: 36px; min-height: 40px; }
+.stern.an { color: #e0a100; }
+.stern:focus-visible { outline: 2px solid var(--akzent, #c0392b); border-radius: 6px; }
+.formular.nur-lesen button.stern:disabled { cursor: not-allowed; pointer-events: none; }
+.titel .bewertung { white-space: nowrap; font-size: 0.85em; font-weight: 700; color: #a87400; margin-left: 4px; }
+.bewertung-feld .label-text { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 2px; }
+
+/* Filter mit Häkchen (Format, Inhalt): 2 Spalten, große Tippflächen */
+.filter-haken { border: 0; padding: 0; margin: 0; min-width: 0; }
+.filter-haken legend { font-weight: 600; font-size: 0.9rem; padding: 0; margin-bottom: 4px; }
+.haken-gitter { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 10px; }
+.filter-haken .haken-wert { display: flex; align-items: center; gap: 8px; min-height: 40px; font-weight: 400; font-size: 0.92rem; overflow-wrap: anywhere; cursor: pointer; }
+.filter-haken .haken-wert input { width: 20px; height: 20px; flex: none; accent-color: var(--akzent, #c0392b); }

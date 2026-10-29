@@ -9,7 +9,7 @@
     tonies: [],
     ansicht: "alle",
     suche: "",
-    filter: { reihe: "", format: "", inhalt: "", thema: "", zustand: "", raritaet: "", version: "", geprueft: "", preis: "" },
+    filter: { reihe: "", format: [], inhalt: [], thema: "", zustand: "", raritaet: "", version: "", geprueft: "", preis: "" },
     sortierung: "titel",
     entsperrt: false, // mit PIN oder Passwort: private Felder sichtbar
   };
@@ -65,9 +65,13 @@
   }
 
   // Sortierungen; "privat" nur entsperrt sichtbar. Tonies ohne Preis kommen immer ans Ende.
+  // Reihenfolge für "Nach Format": erst Figuren, dann Audioinhalte und Tonieplay, unbekannte zuletzt
+  const FORMAT_REIHENFOLGE = ["Tonie-Figur", "Kuschel-Tonie", "Pocket-Tonie", "Kreativ-Tonie", "Clever-Tonie", "My first Tonie", "Audioinhalt", "Tonieplay"];
+  const formatRang = (t) => { const i = FORMAT_REIHENFOLGE.indexOf(t.format); return i < 0 ? FORMAT_REIHENFOLGE.length : i; };
   const SORTIERUNGEN = {
     titel: { text: "A–Z Titel", vergleich: nachTitel },
     reihe: { text: "A–Z Reihe", vergleich: (a, b) => sortierer.compare(a.reihe, b.reihe) || nachTitel(a, b) },
+    format: { text: "Nach Format", vergleich: (a, b) => formatRang(a) - formatRang(b) || nachTitel(a, b) },
     neu: { text: "Neueste zuerst", vergleich: nachDatum("hinzugefuegtAm") },
     geaendert: { text: "Zuletzt geändert", vergleich: nachDatum("geaendertAm") },
     anzahl: { text: "Meiste zuerst", vergleich: (a, b) => (b.behalten + b.verkaufen) - (a.behalten + a.verkaufen) || nachTitel(a, b) },
@@ -124,8 +128,27 @@
     return String(t[feld] || "").split(",").map((w) => w.trim()).filter(Boolean);
   };
 
+  // Format und Inhalt erlauben mehrere Werte (Liste); einer davon muss passen. Die übrigen Filter: ein Wert.
+  const MEHRFACH = ["format", "inhalt"];
+  const filterAktiv = (filter, f) => MEHRFACH.includes(f) ? filter[f].length > 0 : !!filter[f];
+  const passtFilter = (t, filter, f) => !filterAktiv(filter, f) ||
+    (MEHRFACH.includes(f) ? filter[f].some((w) => werteVon(t, f).includes(w)) : werteVon(t, f).includes(filter[f]));
+
   // Auswahllisten aus den Daten füllen, damit neue Werte im Sheet automatisch erscheinen.
   function filterFuellen() {
+    document.querySelectorAll("[data-filter-mehr]").forEach((gruppe) => {
+      const feld = gruppe.dataset.filterMehr;
+      const anzahl = {};
+      zustand.tonies.forEach((t) => werteVon(t, feld).forEach((w) => { anzahl[w] = (anzahl[w] || 0) + 1; }));
+      // Format in der gewohnten Reihenfolge (Figuren zuerst), Inhalt alphabetisch
+      const werte = Object.keys(anzahl).sort(feld === "format"
+        ? (a, b) => formatRang({ format: a }) - formatRang({ format: b }) || sortierer.compare(a, b) : sortierer.compare);
+      // Gewählte Werte, die es nicht mehr gibt, fallen weg.
+      zustand.filter[feld] = zustand.filter[feld].filter((w) => anzahl[w]);
+      gruppe.querySelector(".haken-gitter").innerHTML = werte.map((w) =>
+        `<label class="haken-wert"><input type="checkbox" value="${esc(w)}"${zustand.filter[feld].includes(w) ? " checked" : ""}> ` +
+        `<span>${esc(w)} <span class="klein">(${anzahl[w]})</span></span></label>`).join("");
+    });
     el.filter.forEach((auswahl) => {
       auswahl.length = 1;
       const feld = auswahl.dataset.filter;
@@ -243,7 +266,7 @@
       </div>
       <div class="text">
         ${oben ? `<p class="reihe">${markiert(oben)}</p>` : ""}
-        <h2 class="titel">${markiert(t.titel)}</h2>
+        <h2 class="titel">${markiert(t.titel)}${t.bewertung ? ` <span class="bewertung" aria-label="${t.bewertung} von 5 Sternen">${t.bewertung} ★</span>` : ""}</h2>
         ${t.raritaet && t.raritaet !== "Normal" ? `<p class="raritaet-zeile">★ ${esc(t.raritaet)}</p>` : ""}
         <div class="marken">${marken.join("")}</div>
         ${details ? `<p class="details">${details}</p>` : ""}
@@ -253,6 +276,12 @@
     </li>`;
   }
 
+  // "Tonie-Figur, Kuschel-Tonie +2" für den Chip eines Mehrfach-Filters
+  function filterWertText(f) {
+    const w = zustand.filter[f];
+    if (!MEHRFACH.includes(f)) return w;
+    return w.slice(0, 2).join(", ") + (w.length > 2 ? ` +${w.length - 2}` : "");
+  }
   const FILTER_NAMEN = { reihe: "Reihe", format: "Format", inhalt: "Inhalt", thema: "Thema", zustand: "Zustand", raritaet: "Rarität",
     version: "Version", geprueft: "Wert", preis: "Preis" };
 
@@ -261,7 +290,7 @@
   function sichtbareTonies(filter) {
     const suche = zustand.suche.trim();
     let liste = zustand.tonies.filter((t) => passtZurAnsicht(t, zustand.ansicht) &&
-      FILTER.every((f) => !filter[f] || werteVon(t, f).includes(filter[f])));
+      FILTER.every((f) => passtFilter(t, filter, f)));
     if (suche) {
       const felder = zustand.entsperrt ? SUCHFELDER_PRIVAT : SUCHFELDER;
       liste = TonieSuche.suchen(liste, suche, { felder }).map((x) => x.eintrag);
@@ -273,7 +302,7 @@
   function zeichnen() {
     const { ansicht } = zustand;
     const sichtbar = sichtbareTonies(zustand.filter);
-    const aktiv = FILTER.filter((f) => zustand.filter[f]);
+    const aktiv = FILTER.filter((f) => filterAktiv(zustand.filter, f));
     const eingeschraenkt = zustand.suche.trim().length > 0 || aktiv.length > 0;
 
     el.karten.innerHTML = sichtbar.map((t) => karte(t, ansicht)).join("");
@@ -282,7 +311,14 @@
     // "Verkaufen" ist der jeweils andere Wert nicht aussagekräftig.
     const summe = (feld) => sichtbar.reduce((s, t) => s + t[feld], 0);
     const verliehen = sichtbar.filter((t) => t.verliehen).length;
-    const teile = [`${sichtbar.length} ${sichtbar.length === 1 ? "Tonie" : "Tonies"}`];
+    // Getrennt gezählt: Figuren (Tonies), Audioinhalte und Tonieplay-Spiele; Arten mit 0 entfallen
+    const art = (t) => t.format === "Audioinhalt" ? "audio" : t.format === "Tonieplay" ? "play" : "tonie";
+    const n = { tonie: 0, audio: 0, play: 0 };
+    sichtbar.forEach((t) => { n[art(t)]++; });
+    const teile = [];
+    if (n.tonie || !sichtbar.length) teile.push(`${n.tonie} ${n.tonie === 1 ? "Tonie" : "Tonies"}`);
+    if (n.audio) teile.push(`${n.audio} ${n.audio === 1 ? "Audioinhalt" : "Audioinhalte"}`);
+    if (n.play) teile.push(`${n.play} Tonieplay`);
     if (ansicht === "alle" || ansicht === "behalten") teile.push(`${summe("behalten")} behalten`);
     if (ansicht === "alle" || ansicht === "verkaufen") teile.push(`${summe("verkaufen")} verkaufen`);
     if (verliehen && ansicht !== "verliehen") teile.push(`${verliehen} verliehen`);
@@ -294,7 +330,7 @@
     el.aktiveFilter.hidden = !aktiv.length;
     el.aktiveFilter.innerHTML = aktiv.map((f) =>
       `<button type="button" class="filter-chip" data-weg="${f}" aria-label="Filter ${FILTER_NAMEN[f]} entfernen">` +
-      `${FILTER_NAMEN[f]}: ${esc(zustand.filter[f])} <span aria-hidden="true">✕</span></button>`).join("") +
+      `${FILTER_NAMEN[f]}: ${esc(filterWertText(f))} <span aria-hidden="true">✕</span></button>`).join("") +
       (aktiv.length > 1 ? `<button type="button" class="filter-chip leise" data-weg="alle">Alle entfernen</button>` : "");
 
     el.knoepfe.forEach((k) => k.setAttribute("aria-pressed", k.dataset.ansicht === ansicht));
@@ -337,8 +373,17 @@
     zustand.filter[auswahl.dataset.filter] = auswahl.value;
     zeichnen();
   }));
+  document.querySelectorAll("[data-filter-mehr]").forEach((gruppe) => gruppe.addEventListener("change", () => {
+    zustand.filter[gruppe.dataset.filterMehr] = [...gruppe.querySelectorAll("input:checked")].map((h) => h.value);
+    zeichnen();
+  }));
+  function mehrfachLeeren(f) {
+    zustand.filter[f] = [];
+    document.querySelectorAll(`[data-filter-mehr="${f}"] input`).forEach((h) => { h.checked = false; });
+  }
   function filterLeeren() {
     el.filter.forEach((auswahl) => { auswahl.value = ""; zustand.filter[auswahl.dataset.filter] = ""; });
+    MEHRFACH.forEach(mehrfachLeeren);
     zeichnen();
   }
   el.filterZurueck.addEventListener("click", filterLeeren);
@@ -346,8 +391,11 @@
     const k = ev.target.closest("[data-weg]");
     if (!k) return;
     if (k.dataset.weg === "alle") return filterLeeren();
-    zustand.filter[k.dataset.weg] = "";
-    document.querySelector(`[data-filter="${k.dataset.weg}"]`).value = "";
+    if (MEHRFACH.includes(k.dataset.weg)) mehrfachLeeren(k.dataset.weg);
+    else {
+      zustand.filter[k.dataset.weg] = "";
+      document.querySelector(`[data-filter="${k.dataset.weg}"]`).value = "";
+    }
     zeichnen();
   });
 
@@ -548,7 +596,11 @@
       history.replaceState(null, "", "#" + g.ansicht);
     }
     zustand.suche = el.suche.value = String(g.suche || "");
-    FILTER.forEach((f) => { zustand.filter[f] = (g.filter && g.filter[f]) || ""; });
+    FILTER.forEach((f) => {
+      const w = g.filter && g.filter[f];
+      // Früher gemerkter Einzelwert wird bei Format/Inhalt zur Liste
+      zustand.filter[f] = MEHRFACH.includes(f) ? (Array.isArray(w) ? w : w ? [w] : []) : (typeof w === "string" ? w : "");
+    });
     return g;
   }
   window.addEventListener("pagehide", uebersichtMerken);

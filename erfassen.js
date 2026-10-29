@@ -134,8 +134,11 @@
       const alle = zustand.liste.flatMap((t) => trennen ? String(t[feld]).split(",") : [t[feld]]);
       return [...new Set(alle.map((w) => String(w).trim()).filter(Boolean))].sort((x, y) => x.localeCompare(y, "de"));
     };
+    // Feste Formate immer vorschlagen (auch wenn noch keins davon in der Sammlung ist), dazu die vorhandenen
+    const FORMATE = ["Tonie-Figur", "Kreativ-Tonie", "Kuschel-Tonie", "Pocket-Tonie", "Clever-Tonie", "My first Tonie", "Tonieplay", "Audioinhalt"];
     [["reihe"], ["kollektion"], ["format"], ["inhalt"], ["thema", true]].forEach(([feld, trennen]) => {
-      $("vorschlag-" + feld).innerHTML = werte(feld, trennen).map((w) => `<option value="${esc(w)}">`).join("");
+      const liste = feld === "format" ? FORMATE.concat(werte(feld).filter((w) => FORMATE.indexOf(w) < 0)) : werte(feld, trennen);
+      $("vorschlag-" + feld).innerHTML = liste.map((w) => `<option value="${esc(w)}">`).join("");
     });
   }
 
@@ -489,14 +492,36 @@
   }
 
   // ---------- Formular ----------
-  const FELDER = ["link", "bild", "titel", "reihe", "kollektion", "format", "inhalt", "thema", "version", "raritaet", "preis", "zustand",
+  const FELDER = ["link", "bild", "titel", "reihe", "kollektion", "format", "inhalt", "thema", "version", "raritaet", "bewertung", "preis", "zustand",
     "richtwert", "richtwertOvp", "wertQuelle", "wertStand", "verliehenAn", "verliehenAm", "kommentar", "pruefen"];
 
   function feldSetzen(name, wert) {
     let w = wert === null || wert === undefined ? "" : (name === "preis" ? preisText(wert) : String(wert));
     if (name === "raritaet" && w === "Normal") w = "";
     $("f-" + name).value = w;
+    if (name === "bewertung") sterneZeichnen();
   }
+
+  // ---------- Bewertung (1–5 Sterne) ----------
+  const BEWERTUNG_TEXT = ["", "Nicht gut", "Geht so", "Ok", "Gut", "Sehr gut"];
+  function sterneZeichnen() {
+    const n = Number($("f-bewertung").value) || 0;
+    document.querySelectorAll(".stern").forEach((s) => {
+      const an = Number(s.dataset.stern) <= n;
+      s.classList.toggle("an", an);
+      s.setAttribute("aria-pressed", String(Number(s.dataset.stern) === n));
+    });
+    $("bewertung-text").textContent = n ? `${n} ★ – ${BEWERTUNG_TEXT[n]}` : "noch keine Bewertung";
+    document.querySelector('[data-aktion="bewertung-leeren"]').hidden = !n || zustand.modus === "lesen";
+  }
+  document.addEventListener("click", (ev) => {
+    const s = ev.target.closest("[data-stern]");
+    const leeren = ev.target.closest('[data-aktion="bewertung-leeren"]');
+    if (!s && !leeren) return;
+    // Nochmal auf denselben Stern tippen = Bewertung wieder entfernen
+    $("f-bewertung").value = leeren || $("f-bewertung").value === s.dataset.stern ? "" : s.dataset.stern;
+    sterneZeichnen();
+  });
 
   // Ansicht je Modus: neu, ergänzen (Anzahl erhöhen) oder verwalten (alle Felder eines Tonies ändern)
   function modusAnzeigen() {

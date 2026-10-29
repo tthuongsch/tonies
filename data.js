@@ -30,6 +30,7 @@
     "Richtwert OVP": "richtwertOvp",
     "Wert-Quelle": "wertQuelle",
     "Wert-Stand": "wertStand",
+    "Bewertung": "bewertung",
   };
 
   // Spaltenköpfe tolerant vergleichen: Leerzeichen und Groß-/Kleinschreibung egal.
@@ -108,6 +109,8 @@
       richtwertOvp: roh.richtwertOvp || "",
       wertQuelle: /^https:\/\//i.test(roh.wertQuelle) ? roh.wertQuelle : "",
       wertStand: roh.wertStand || "",
+      // Bewertung des Inhalts: 1–5 Sterne, sonst null (noch nicht bewertet)
+      bewertung: [1, 2, 3, 4, 5].indexOf(Number(roh.bewertung)) >= 0 ? Number(roh.bewertung) : null,
     };
     // Ohne Titel und Reihe ist es keine echte Zeile (z. B. eine Leerzeile).
     if (!t.titel && !t.reihe) return null;
