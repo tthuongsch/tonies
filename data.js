@@ -116,7 +116,9 @@
     if (!t.titel && !t.reihe) return null;
     if (!t.titel) t.titel = t.reihe;
     if (!t.reihe) t.reihe = t.titel;
-    t.anzahlFehlt = t.behalten === 0 && t.verkaufen === 0;
+    // Audioinhalte sind digital: kein Behalten/Verkaufen (zählen nicht mit, keine Marke, nicht in diesen Ansichten)
+    if (t.format === "Audioinhalt") { t.behalten = 0; t.verkaufen = 0; }
+    t.anzahlFehlt = t.behalten === 0 && t.verkaufen === 0 && t.format !== "Audioinhalt";
     return t;
   }
 

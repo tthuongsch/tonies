@@ -589,7 +589,11 @@
     anzahlAktualisieren();
   }
 
+  // Audioinhalte sind digital: keine Anzahl, kein Verkauf, kein Wert
+  const istAudioForm = () => $("f-format").value.trim() === "Audioinhalt";
+
   function anzahlen() {
+    if (istAudioForm()) return { behalten: 0, verkaufen: 0 };
     const wert = (art) => $("h-" + art).checked ? Math.max(0, parseInt($("f-" + art).value, 10) || 0) : 0;
     return { behalten: wert("behalten"), verkaufen: wert("verkaufen") };
   }
@@ -598,7 +602,11 @@
     ["behalten", "verkaufen"].forEach((art) => { $("f-" + art).disabled = !$("h-" + art).checked; });
     const n = anzahlen();
     const ziel = zustand.ziel;
-    const verkauf = n.verkaufen > 0 || (ziel && ziel.verkaufen > 0);
+    const audio = istAudioForm();
+    document.querySelector("fieldset.anzahl").hidden = audio;
+    if (audio) $("wert-einstieg").hidden = true;
+    else if (zustand.modus === "verwalten") $("wert-einstieg").hidden = !zustand.zugang;
+    const verkauf = !audio && (n.verkaufen > 0 || (ziel && ziel.verkaufen > 0));
     $("verkaufsfelder").hidden = !verkauf;
     // Zustand gehört nur zum Exemplar im Verkauf: freundlicher Hinweis, blockiert aber nicht.
     $("zustand-hinweis").hidden = !(verkauf && !$("f-zustand").value);
@@ -658,6 +666,8 @@
       ? `${neu.join(", ")} steht nicht im Tab „Listen“ – wird trotzdem so übernommen.` : "";
   }
   ["f-format", "f-inhalt", "f-thema"].forEach((id) => $(id).addEventListener("change", listenHinweis));
+  // Format "Audioinhalt" gewählt oder wieder geändert: Anzahl- und Verkaufsfelder ein-/ausblenden
+  ["input", "change"].forEach((art) => $("f-format").addEventListener(art, anzahlAktualisieren));
 
   // ---------- Doppelte ----------
   function vereinfachen(text) {
@@ -851,7 +861,7 @@
     let daten;
     if (zustand.modus === "ergaenzen") {
       const ziel = zustand.ziel;
-      if (!n.behalten && !n.verkaufen && !confirm("Keine Anzahl hinzugefügt. Nur die Angaben aktualisieren?")) return;
+      if (!istAudioForm() && !n.behalten && !n.verkaufen && !confirm("Keine Anzahl hinzugefügt. Nur die Angaben aktualisieren?")) return;
       daten = Object.assign({ modus: "ergaenzen", ziel: { link: ziel.link, titel: ziel.titel, reihe: ziel.reihe },
         plusBehalten: n.behalten, plusVerkaufen: n.verkaufen, felder }, foto);
     } else {
