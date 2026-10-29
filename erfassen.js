@@ -682,6 +682,9 @@
     beschriftungen();
     bildVorschau();
     eigenStart(t.eigenesFoto);
+    // Gerade ermittelte Werte nicht mit den alten aus der Sammlung überschreiben
+    const erg = zustand.ergebnis;
+    if (erg && erg.werte && erg.t && ((erg.t.link && erg.t.link === t.link) || erg.t.titel === t.titel)) werteInsFormular(erg.werte);
     window.scrollTo(0, 0);
   }
 
@@ -926,6 +929,18 @@
     }
     lesenZeigen(t, privat);
   }
+
+  // Nur ansehen: wer in ein Feld tippt oder klickt, bekommt den Hinweis aufs Passwort
+  $("form-tonie").addEventListener("click", (ev) => {
+    if (zustand.modus !== "lesen" || ev.target.closest("a, [data-aktion='zur-sammlung']")) return;
+    if (!ev.target.closest(".feld, fieldset, label")) return;
+    const leiste = $("lesen-leiste");
+    $("lesen-text").textContent = "Zum Bearbeiten bitte mit dem Passwort entsperren („Bearbeiten (Passwort)“).";
+    leiste.classList.remove("achtung"); void leiste.offsetWidth; leiste.classList.add("achtung");
+    leiste.scrollIntoView({ behavior: "smooth", block: "center" });
+    clearTimeout(leiste.timer);
+    leiste.timer = setTimeout(() => leiste.classList.remove("achtung"), 2500);
+  });
 
   function lesenZeigen(t, privat) {
     const sicher = Object.assign({}, t);
@@ -1331,6 +1346,8 @@
   function werteInsFormular(w) {
     if (w.raritaet !== undefined) $("f-raritaet").value = w.raritaet === "Normal" ? "" : w.raritaet;
     ["richtwert", "richtwertOvp", "wertQuelle", "wertStand"].forEach((f) => { if (w[f] !== undefined) $("f-" + f).value = w[f]; });
+    // Selbst festgelegter Preis aus dem Wert-Assistenten: steht schon drin, wenn du „Verkaufen“ anhakst
+    if (w.preis) $("f-preis").value = w.preis;
     quelleKnopf();
   }
 

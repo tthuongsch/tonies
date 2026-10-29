@@ -495,7 +495,8 @@ mark { background: #ffe58a; color: inherit; border-radius: 3px; padding: 0 1px; 
 
 /* Schloss (PIN) und PIN-Fenster */
 .kopf-knoepfe { display: flex; gap: 8px; align-items: center; }
-.schloss { min-width: 44px; padding: 8px 10px; font-size: 1.1rem; }
+.schloss { min-width: 44px; padding: 8px 10px; font-size: 1.1rem; display: inline-flex; align-items: center; justify-content: center; }
+.schloss.offen { color: var(--behalten, #1f7a4d); }
 .fenster {
   border: 0; border-radius: var(--radius); padding: 20px; width: min(92vw, 360px);
   box-shadow: 0 10px 40px rgb(0 0 0 / 0.25); color: var(--text); background: var(--flaeche);
@@ -511,6 +512,8 @@ mark { background: #ffe58a; color: inherit; border-radius: 3px; padding: 0 1px; 
 .pin-eingabe:focus-visible { outline: 3px solid var(--akzent); outline-offset: 1px; }
 .marke.gesperrt { border: 1px dashed var(--linie); background: var(--flaeche); color: var(--leise); font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
 .marke.raritaet { background: #fff3c4; color: #8a6100; }
+/* Rarität direkt unter dem Namen (nur wenn nicht „Normal“) */
+.raritaet-zeile { margin: 2px 0 6px; font-size: 0.85rem; font-weight: 700; color: #8a6100; }
 .marke.verliehen { background: #e8e3fb; color: #4b3a99; white-space: normal; border-radius: 10px; }
 
 /* Verleihen, Verwalten, Archivieren */
@@ -550,6 +553,9 @@ fieldset.eigenes-foto .klein { margin: 0; }
 .formular.nur-lesen input:disabled, .formular.nur-lesen select:disabled, .formular.nur-lesen textarea:disabled {
   opacity: 1; color: var(--text); -webkit-text-fill-color: var(--text); background: var(--hintergrund);
 }
+.formular.nur-lesen input:disabled, .formular.nur-lesen select:disabled, .formular.nur-lesen textarea:disabled { pointer-events: none; }
+.formular.nur-lesen .feld, .formular.nur-lesen fieldset { cursor: not-allowed; }
+.lesen-leiste.achtung { outline: 3px solid var(--verkaufen, #b3261e); outline-offset: 2px; }
 .formular.nur-lesen [data-aktion="auslesen"], .formular.nur-lesen [data-aktion="zurueckgegeben"] { display: none; }
 
 /* "Auf tonies.com öffnen ↗" unter dem Link-Feld */

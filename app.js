@@ -188,6 +188,10 @@
     const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
     return m ? `${m[3]}.${m[2]}.${m[1].slice(2)}` : "";
   }
+  const SCHLOSS_ZU = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>' +
+    '<path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  const SCHLOSS_OFFEN = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>' +
+    '<path d="M8 11V7a4 4 0 0 1 7.5-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   // Ein Schloss-Knopf auf der Karte öffnet das PIN-Fenster.
   const gesperrt = (text) => `<button type="button" class="marke gesperrt" data-pin>🔒 ${esc(text)}</button>`;
 
@@ -218,11 +222,7 @@
       marken.push(`<span class="marke behalten">${t.behalten}× behalten</span>`);
     }
     if (t.anzahlFehlt) marken.push(`<span class="marke fehlt">Anzahl fehlt</span>`);
-    if (t.raritaet && t.raritaet !== "Normal") marken.push(`<span class="marke raritaet">★ ${esc(t.raritaet)}</span>`);
     if (t.version && !/^unbekannt$/i.test(t.version)) marken.push(`<span class="marke version">${esc(versionText(t.version))}</span>`);
-    if (zustand.entsperrt && (t.richtwert || t.richtwertOvp)) {
-      marken.push(`<span class="marke richtwert">Richtwert ${[t.richtwert ? `gebraucht ${esc(t.richtwert)} €` : "", t.richtwertOvp ? `OVP ${esc(t.richtwertOvp)} €` : ""].filter(Boolean).join(" · ")}</span>`);
-    }
     if (zustand.sortierung === "unvollstaendig" && fehlendes(t).length) {
       marken.push(`<span class="marke fehlt">Fehlt: ${esc(fehlendes(t).join(", "))}</span>`);
     }
@@ -244,6 +244,7 @@
       <div class="text">
         ${oben ? `<p class="reihe">${markiert(oben)}</p>` : ""}
         <h2 class="titel">${markiert(t.titel)}</h2>
+        ${t.raritaet && t.raritaet !== "Normal" ? `<p class="raritaet-zeile">★ ${esc(t.raritaet)}</p>` : ""}
         <div class="marken">${marken.join("")}</div>
         ${details ? `<p class="details">${details}</p>` : ""}
         ${zustand.entsperrt && t.kommentar ? `<p class="kommentar">${markiert(t.kommentar)}</p>` : ""}
@@ -297,8 +298,10 @@
       (aktiv.length > 1 ? `<button type="button" class="filter-chip leise" data-weg="alle">Alle entfernen</button>` : "");
 
     el.knoepfe.forEach((k) => k.setAttribute("aria-pressed", k.dataset.ansicht === ansicht));
-    el.schloss.textContent = zustand.entsperrt ? "🔓" : "🔒";
-    el.schloss.setAttribute("aria-label", zustand.entsperrt ? "Entsperrt – Zugang verwalten" : "Mit PIN entsperren");
+    // Zu = gesperrt, offen = mit PIN entsperrt (Zeichnung statt Emoji: 🔒 und 🔓 sehen sich zu ähnlich)
+    el.schloss.innerHTML = zustand.entsperrt ? SCHLOSS_OFFEN : SCHLOSS_ZU;
+    el.schloss.classList.toggle("offen", zustand.entsperrt);
+    el.schloss.setAttribute("aria-label", zustand.entsperrt ? "Entsperrt – Zugang verwalten" : "Gesperrt – mit PIN entsperren");
     el.hinweis.hidden = sichtbar.length > 0;
     if (!sichtbar.length) {
       el.hinweis.textContent = eingeschraenkt

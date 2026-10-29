@@ -16,7 +16,7 @@
   }
 
   // Zustände auf dem ToyTales-Markt; "Ungeöffnet" zählt zu OVP, alles andere zu gebraucht
-  const ZUSTAND = /(Ungeöffnet|Ungeoeffnet|Neu|Sehr gut|Gut|Akzeptabel)\s*(ab|bis)\s*(\d+(?:[.,]\d+)?)\s*€/gi;
+  const ZUSTAND = /(Ungeöffnet|Ungeoeffnet|Neu|Sehr gut|Gut|Zufriedenstellend|Akzeptabel)\s*(ab|bis)\s*(\d+(?:[.,]\d+)?)\s*€/gi;
   const istOvp = (z) => /^(ungeöffnet|ungeoeffnet|neu)$/i.test(z);
 
   function abschnitt(text, von, bis) {
