@@ -668,3 +668,27 @@ table.anzeigen tr.aus td { color: var(--leise); }
 .haken-gitter { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 10px; }
 .filter-haken .haken-wert { display: flex; align-items: center; gap: 8px; min-height: 40px; font-weight: 400; font-size: 0.92rem; overflow-wrap: anywhere; cursor: pointer; }
 .filter-haken .haken-wert input { width: 20px; height: 20px; flex: none; accent-color: var(--akzent, #c0392b); }
+/* Computer: Format | Inhalt nebeneinander (je eine Spalte Häkchen), Felder nicht strecken */
+@media (min-width: 700px) {
+  .filter { align-items: start; }
+  .filter-haken .haken-gitter { grid-template-columns: 1fr; }
+}
+
+/* Eigene Auswahlliste im Formular: zeigt beim Antippen immer alle Werte */
+.auswahl-feld { position: relative; display: block; }
+.auswahl-feld > input { width: 100%; padding-right: 38px; }
+.auswahl-pfeil { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 34px; height: 34px;
+  border: 0; background: none; color: var(--leise); font-size: 1rem; cursor: pointer; }
+.auswahl-liste { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30; margin: 0; padding: 4px;
+  list-style: none; max-height: 272px; overflow-y: auto; background: var(--flaeche); border: 1px solid var(--linie);
+  border-radius: 10px; box-shadow: var(--schatten); }
+.auswahl-liste button { display: block; width: 100%; text-align: left; padding: 10px 12px; min-height: 44px; border: 0;
+  background: none; border-radius: 8px; color: var(--text); font: inherit; cursor: pointer; overflow-wrap: anywhere; }
+.auswahl-liste button:hover, .auswahl-liste button.aktiv { background: var(--hintergrund); }
+.auswahl-liste [aria-selected="true"] button { font-weight: 700; }
+
+/* Erinnerung "Preis ohne Verkaufen" */
+#verkauf-erinnerung { width: min(92vw, 420px); }
+.erinnerung-kopf { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.erinnerung-kopf h2 { margin: 0; font-size: 1.1rem; }
+#erinnerung-punkte { margin: 4px 0 12px; padding-left: 20px; }

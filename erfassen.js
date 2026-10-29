@@ -856,6 +856,9 @@
       return;
     }
     const n = anzahlen();
+    // Preis steht schon fest (meist aus dem Wert-Assistenten), aber Verkaufen/Zustand fehlen: einmal erinnern
+    if (!zustand.erinnerungOk && verkaufErinnern(felder, n)) return;
+    zustand.erinnerungOk = false;
     if (zustand.modus === "verwalten") return speichern(Object.assign(felder, n), false);
     const foto = fotoDaten();
     let daten;
@@ -878,6 +881,39 @@
     // Aus "Tonie erkennen": gleich den nächsten Tonie fotografieren statt zurück zur Übersicht
     if (zustand.ausErkennen) return weiterZeigen(text);
     zurueckZurSammlung(text);
+  });
+
+  // ---------- Erinnerung: Preis ohne Verkaufen ----------
+  function verkaufErinnern(felder, n) {
+    if (istAudioForm() || !String(felder.preis || "").trim()) return false;
+    const imVerkauf = n.verkaufen > 0 || (zustand.modus === "ergaenzen" && zustand.ziel && zustand.ziel.verkaufen > 0);
+    const punkte = [];
+    if (!imVerkauf) punkte.push("„Verkaufen“ ist nicht angehakt");
+    if (!felder.zustand) punkte.push("der Zustand fehlt");
+    if (!punkte.length) return false;
+    $("erinnerung-text").textContent = `Du hast einen Preis (${felder.preis} €) festgelegt, aber`;
+    $("erinnerung-punkte").innerHTML = punkte.map((p) => `<li>${esc(p)}</li>`).join("");
+    $("verkauf-erinnerung").showModal();
+    return true;
+  }
+  $("verkauf-erinnerung").addEventListener("click", (ev) => {
+    const k = ev.target.closest("[data-erinnerung]");
+    if (!k) return;
+    $("verkauf-erinnerung").close();
+    if (k.dataset.erinnerung === "speichern") {
+      // Meldung geschlossen: wie gewohnt speichern, ohne erneut zu fragen
+      zustand.erinnerungOk = true;
+      return $("form-tonie").requestSubmit();
+    }
+    // Jetzt ergänzen: nichts speichern, Verkaufen anhaken und zum fehlenden Feld springen
+    if (!$("h-verkaufen").checked && !(zustand.modus === "ergaenzen" && zustand.ziel && zustand.ziel.verkaufen > 0)) {
+      $("h-verkaufen").checked = true;
+      $("f-verkaufen").value = 1;
+    }
+    anzahlAktualisieren();
+    const ziel = $("f-zustand").value ? $("h-verkaufen") : $("f-zustand");
+    ziel.scrollIntoView({ behavior: "smooth", block: "center" });
+    ziel.focus();
   });
 
   // ---------- Tonie verwalten: speichern, Konflikt, archivieren ----------
@@ -1539,6 +1575,19 @@
       ${euroText(s.min)} bis ${euroText(s.max)} · Spanne ${esc(s.spanne)} €</p>`;
   }
 
+  // "Andere Seite wählen": Vorschläge auch dann holen, wenn die App sich sicher war (Treffer kann falsch sein)
+  async function andereSeite() {
+    const w = zustand.wert, t = w.t;
+    const a = await anfrage("toytales", { titel: t.titel, reihe: t.reihe, kollektion: t.kollektion, format: t.format, version: t.version, alle: true });
+    if (zustand.wert !== w) return;
+    const liste = a.ok ? (a.kandidaten || []).filter((k) => k.url !== w.link) : [];
+    if (!liste.length) return wertMeldung("tt", "Keine weiteren passenden ToyTales-Seiten gefunden.", "hinweis");
+    w.vorher = w.link;
+    w.link = "";
+    w.kandidaten = liste;
+    wertZeichnen();
+  }
+
   function wertZeichnen() {
     const w = zustand.wert;
     if (!w) return;
@@ -1557,6 +1606,7 @@
         </div>` : "";
     const linkTeil = w.link
       ? `<div class="knopfreihe links"><a class="knopf leise" href="${esc(w.link)}" target="_blank" rel="noopener noreferrer">ToyTales öffnen ↗</a>
+          <button type="button" class="knopf leise" data-wert="andere">Andere Seite wählen</button>
           ${st && st.auto && st.zugang ? (frisch && !w.neu
             ? `<button type="button" class="knopf" data-wert="neu-frage">Trotzdem neu laden</button>`
             : `<button type="button" class="knopf" data-wert="abrufen">Wert ermitteln (ToyTales)</button>`) : ""}</div>
@@ -1564,8 +1614,9 @@
         <div data-wert-warnung hidden class="vorhanden"><p>ToyTales bittet, den Server nicht unnötig zu belasten. Der Wert ist erst ${Math.round((Date.now() - new Date(t.wertStand + "T12:00:00")) / 86400000)} Tage alt. Trotzdem neu laden?</p>
           <div class="knopfreihe"><button type="button" class="knopf leise" data-wert="neu-nein">Nein</button><button type="button" class="knopf" data-wert="neu-ja">Ja, neu laden</button></div></div>`
       : w.kandidaten.length
-        ? `<p class="klein">Keine eindeutige Seite. Welche ist deine Version?</p>
-           <div class="knopfreihe links">${w.kandidaten.map((k, i) => `<button type="button" class="knopf leise" data-wert="kandidat" data-i="${i}">${esc(versionText(k.version))} · ${esc(k.url.replace("https://toytales.eu/wiki/", ""))}</button>`).join("")}</div>`
+        ? `<p class="klein">${w.vorher ? "Welche ToyTales-Seite passt?" : "Keine eindeutige Seite. Welche passt zu deinem Tonie?"}</p>
+           <div class="knopfreihe links kandidaten">${w.kandidaten.map((k, i) => `<button type="button" class="knopf leise" data-wert="kandidat" data-i="${i}">${esc(k.titel || k.url.replace("https://toytales.eu/wiki/", ""))}${k.version && k.version !== "ohne Versionsangabe" ? ` · ${esc(versionText(k.version))}` : ""}</button>`).join("")}
+           ${w.vorher ? `<button type="button" class="knopf leise" data-wert="andere-zurueck">Zurück zur bisherigen Seite</button>` : `<a class="knopf leise" href="${esc(Quellen.toytales.suchLink(t))}" target="_blank" rel="noopener noreferrer">Nicht dabei – auf ToyTales suchen ↗</a>`}</div>`
         : `<div class="knopfreihe links"><a class="knopf leise" href="${esc(Quellen.toytales.suchLink(t))}" target="_blank" rel="noopener noreferrer">Auf ToyTales suchen ↗</a></div>`;
     const zeilen = w.anzeigen.map((x, i) => `<tr class="${x.aufnehmen ? "" : "aus"}">
         <td>${x.bild || "–"}</td><td>${esc(x.titel)}${x.grund && x.passt !== "ja" ? `<br><span class="klein">${esc(x.grund)}</span>` : ""}</td>
@@ -1752,7 +1803,9 @@
     if (was === "neu-frage") box.querySelector("[data-wert-warnung]").hidden = false;
     if (was === "neu-nein") box.querySelector("[data-wert-warnung]").hidden = true;
     if (was === "neu-ja") { w.neu = true; toytalesAbrufen(true); }
-    if (was === "kandidat") { w.link = w.kandidaten[+k.dataset.i].url; w.kandidaten = []; wertZeichnen(); }
+    if (was === "kandidat") { w.link = w.kandidaten[+k.dataset.i].url; w.kandidaten = []; w.vorher = ""; wertZeichnen(); }
+    if (was === "andere") andereSeite();
+    if (was === "andere-zurueck") { w.link = w.vorher; w.vorher = ""; w.kandidaten = []; wertZeichnen(); }
     if (was === "anzeigen") anzeigenAuswerten();
     if (was === "bild-weg") { w.bilder.splice(+k.dataset.i, 1); wertZeichnen(); }
     if (was === "weg") { w.anzeigen.splice(+k.dataset.i, 1); wertNeuRechnen(); }
@@ -1828,6 +1881,86 @@
   });
 
   // ---------- Hilfen ----------
+  // ---------- Auswahllisten (Reihe, Kollektion, Format, Inhalt, Thema, Version) ----------
+  // Die Vorschlagsliste des Browsers zeigt bei gefülltem Feld nur passende Werte. Diese eigene Liste
+  // zeigt beim Antippen immer alle Werte und filtert erst beim Tippen; freie Eingabe bleibt möglich.
+  const AUSWAHL_FELDER = ["reihe", "kollektion", "format", "inhalt", "thema", "version"];
+  const klein = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  AUSWAHL_FELDER.forEach((feld) => {
+    const eingabe = $("f-" + feld);
+    if (!eingabe) return;
+    const quelle = $("vorschlag-" + feld);
+    eingabe.removeAttribute("list");
+    eingabe.setAttribute("autocomplete", "off");
+    eingabe.setAttribute("role", "combobox");
+    eingabe.setAttribute("aria-expanded", "false");
+    const huelle = document.createElement("span");
+    huelle.className = "auswahl-feld";
+    eingabe.parentNode.insertBefore(huelle, eingabe);
+    huelle.appendChild(eingabe);
+    huelle.insertAdjacentHTML("beforeend",
+      `<button type="button" class="auswahl-pfeil" tabindex="-1" aria-label="Auswahl öffnen">▾</button><ul class="auswahl-liste" role="listbox" hidden></ul>`);
+    const liste = huelle.querySelector(".auswahl-liste");
+    const mehrere = feld === "thema"; // mehrere Werte mit Komma: Auswahl ersetzt den letzten Wert
+    let aktiv = -1;
+    const letzter = () => mehrere ? eingabe.value.split(",").pop().trim() : eingabe.value.trim();
+    function oeffnen(filtern) {
+      const werte = [...(quelle ? quelle.options : [])].map((o) => o.value).filter(Boolean);
+      const jetzt = letzter();
+      let zeigen = filtern && jetzt ? werte.filter((w) => klein(w).includes(klein(jetzt))) : werte.slice();
+      // Aktueller Wert markiert und oben
+      if (!filtern && jetzt && zeigen.includes(jetzt)) zeigen = [jetzt].concat(zeigen.filter((w) => w !== jetzt));
+      aktiv = -1;
+      if (!zeigen.length) return schliessen();
+      liste.innerHTML = zeigen.slice(0, 200).map((w) =>
+        `<li role="option" aria-selected="${w === jetzt}"><button type="button" tabindex="-1" data-wert="${esc(w)}">${w === jetzt ? "✓ " : ""}${esc(w)}</button></li>`).join("");
+      liste.hidden = false;
+      eingabe.setAttribute("aria-expanded", "true");
+      liste.scrollTop = 0;
+      liste.scrollIntoView({ block: "nearest" });
+    }
+    function schliessen() { liste.hidden = true; eingabe.setAttribute("aria-expanded", "false"); aktiv = -1; }
+    function waehlen(w) {
+      if (mehrere) {
+        const teile = eingabe.value.split(",").map((x) => x.trim());
+        teile[teile.length - 1] = w;
+        eingabe.value = teile.filter(Boolean).join(", ");
+      } else eingabe.value = w;
+      schliessen();
+      eingabe.dispatchEvent(new Event("input", { bubbles: true }));
+      eingabe.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    function markieren(neu) {
+      const punkte = [...liste.querySelectorAll("button")];
+      if (!punkte.length) return;
+      aktiv = (neu + punkte.length) % punkte.length;
+      punkte.forEach((b, i) => b.classList.toggle("aktiv", i === aktiv));
+      punkte[aktiv].scrollIntoView({ block: "nearest" });
+    }
+    eingabe.addEventListener("focus", () => oeffnen(false));
+    eingabe.addEventListener("click", () => { if (liste.hidden) oeffnen(false); });
+    eingabe.addEventListener("input", (ev) => { if (ev.isTrusted) oeffnen(true); });
+    eingabe.addEventListener("blur", () => setTimeout(schliessen, 150));
+    eingabe.addEventListener("keydown", (ev) => {
+      if (ev.key === "ArrowDown") { ev.preventDefault(); if (liste.hidden) oeffnen(false); markieren(aktiv + 1); }
+      else if (ev.key === "ArrowUp") { ev.preventDefault(); markieren(aktiv - 1); }
+      else if (ev.key === "Enter" && !liste.hidden && aktiv >= 0) { ev.preventDefault(); waehlen(liste.querySelectorAll("button")[aktiv].dataset.wert); }
+      else if (ev.key === "Escape" && !liste.hidden) { ev.preventDefault(); schliessen(); }
+    });
+    // mousedown statt click: so verliert das Feld den Fokus nicht, bevor gewählt ist
+    liste.addEventListener("mousedown", (ev) => {
+      const b = ev.target.closest("[data-wert]");
+      if (!b) return;
+      ev.preventDefault();
+      waehlen(b.dataset.wert);
+    });
+    huelle.querySelector(".auswahl-pfeil").addEventListener("mousedown", (ev) => {
+      ev.preventDefault();
+      if (eingabe.disabled) return;
+      if (liste.hidden) { eingabe.focus(); oeffnen(false); } else schliessen();
+    });
+  });
+
   function esc(text) {
     return String(text === undefined || text === null ? "" : text).replace(/[&<>"']/g, (z) => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",

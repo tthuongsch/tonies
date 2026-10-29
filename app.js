@@ -307,21 +307,29 @@
 
     el.karten.innerHTML = sichtbar.map((t) => karte(t, ansicht)).join("");
 
-    // Zähler als eine Zeile, bezogen auf die sichtbaren Tonies. In "Behalten" bzw.
-    // "Verkaufen" ist der jeweils andere Wert nicht aussagekräftig.
+    // Zähler als eine Zeile, bezogen auf die sichtbaren Tonies. Tonies und Tonieplay zählen Stück
+    // (2× behalten = 2; ohne Anzahl = 1), Audioinhalte nur als Einträge (digital, kein Behalten/Verkaufen).
     const summe = (feld) => sichtbar.reduce((s, t) => s + t[feld], 0);
     const verliehen = sichtbar.filter((t) => t.verliehen).length;
-    // Getrennt gezählt: Figuren (Tonies), Audioinhalte und Tonieplay-Spiele; Arten mit 0 entfallen
+    const stueck = (t) => ansicht === "behalten" ? t.behalten : ansicht === "verkaufen" ? t.verkaufen
+      : ansicht === "verliehen" ? 1 : Math.max(1, t.behalten + t.verkaufen);
     const art = (t) => t.format === "Audioinhalt" ? "audio" : t.format === "Tonieplay" ? "play" : "tonie";
     const n = { tonie: 0, audio: 0, play: 0 };
-    sichtbar.forEach((t) => { n[art(t)]++; });
+    sichtbar.forEach((t) => { n[art(t)] += art(t) === "audio" ? 1 : stueck(t); });
+    const toniesText = (z) => `${z} ${z === 1 ? "Tonie" : "Tonies"}`;
     const teile = [];
-    if (n.tonie || !sichtbar.length) teile.push(`${n.tonie} ${n.tonie === 1 ? "Tonie" : "Tonies"}`);
-    if (n.audio) teile.push(`${n.audio} ${n.audio === 1 ? "Audioinhalt" : "Audioinhalte"}`);
+    if (n.tonie || !sichtbar.length) {
+      if (ansicht === "behalten") teile.push(`${toniesText(n.tonie)} behalten`);
+      else if (ansicht === "verkaufen") teile.push(`${toniesText(n.tonie)} zum Verkaufen`);
+      else if (ansicht === "verliehen") teile.push(`${toniesText(n.tonie)} verliehen`);
+      else {
+        const b = summe("behalten"), v = summe("verkaufen");
+        teile.push(toniesText(n.tonie) + (b || v ? ` (${[b ? `${b} behalten` : "", v ? `${v} verkaufen` : ""].filter(Boolean).join(" · ")})` : ""));
+      }
+    }
     if (n.play) teile.push(`${n.play} Tonieplay`);
-    if (ansicht === "alle" || ansicht === "behalten") teile.push(`${summe("behalten")} behalten`);
-    if (ansicht === "alle" || ansicht === "verkaufen") teile.push(`${summe("verkaufen")} verkaufen`);
-    if (verliehen && ansicht !== "verliehen") teile.push(`${verliehen} verliehen`);
+    if (n.audio) teile.push(`${n.audio} ${n.audio === 1 ? "Audioinhalt" : "Audioinhalte"}`);
+    if (verliehen && ansicht === "alle") teile.push(`${verliehen} verliehen`);
     el.zaehler.textContent = teile.join(" · ");
 
     // Filter-Knopf mit Anzahl, darunter die aktiven Filter zum Einzeln-Entfernen
